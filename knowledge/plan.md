@@ -43,12 +43,15 @@ De-duplication principles:
 
 Move `ledger-app/circuits` here as `proofofseed-circuits` (crate renamed; `pos_circuits::` imports updated mechanically). Split `ledger-app/host/psverify` into `proofofseed-host` here (pure Rust: verifier, harness prover, witness derivation, `n_eps`, suite aliases) and a thin PyO3 shim left in `ledger-app` so all existing device tooling keeps working unchanged. Re-path `ledger-app`'s `[patch.crates-io]` tables.
 
-Acceptance (all binary, all off-device):
+Amendment (2026-08-20, ratified same day): split into two halves so the library work can proceed while the hardware gate waits. **M1a — stand up the library from a copy** (may run immediately): golden stream fixtures are recorded from the untouched ledger-app source tree first, then the code is copied here, renamed, PyO3-stripped, and brought to a green battery that reproduces those fixtures; the ledger-app tree is not modified at all, and the source commit the copy was taken from is recorded below. **M1a executed 2026-08-20: the copy was taken from ledger-app commit `86a4656` (branch `bitcoin-and-solana-recovery-statements`, clean tree); the golden fixtures in `host/tests/golden_streams.txt` were generated from that untouched tree; every copied file was verified identical to its source modulo the crate rename, lib.rs additionally minus the PyO3 module (which stays in ledger-app), and the two device-coupled comb-table examples were left behind.** **M1b — the consumer switch** (only after the hardware gate and the branch's merge): reconcile any gate-era changes to the copied files (a diff against the recorded source commit), re-path ledger-app to consume this repo, reduce psverify to the PyO3 shim, delete the moved code.
 
-1. The entire existing ledger-app battery is green with **zero test edits** (imports aside), and both app feature sets build.
-2. **Proof-byte neutrality**: a golden fixture of harness streams (one hash statement, one elephant, one ranged partition, both families; deterministic entropy) recorded before the move is reproduced byte-identically after it. The extraction must not move a single proof byte — the deterministic-entropy transcript tags, the circuit fingerprints, and `DETERMINISTIC_ENTROPY_VERSION` are all untouched by renaming.
-3. No public API change beyond the crate rename; no new dependency.
-4. The number 219 is introduced nowhere.
+Acceptance (all binary, all off-device — items 1 and 5 gate M1b, the rest gate M1a):
+
+1. The entire existing ledger-app battery is green with **zero test edits** (imports aside), and both app feature sets build. (M1b)
+2. **Proof-byte neutrality**: a golden fixture of harness streams (hash statements of both families, an elephant, a ranged partition, both entropy modes) recorded from the pre-copy ledger-app code is reproduced byte-identically by this repo's crates. The extraction must not move a single proof byte — the deterministic-entropy transcript tags, the circuit fingerprints, and `DETERMINISTIC_ENTROPY_VERSION` are all untouched by renaming. (M1a)
+3. No public API change beyond the crate rename; no new dependency. (M1a)
+4. The number 219 is introduced nowhere. (M1a)
+5. The M1b reconciliation diff against the recorded source commit is empty or every difference is deliberately carried over. (M1b)
 
 ## Milestone 2 — rust-app (`proofofseed-cli`)
 

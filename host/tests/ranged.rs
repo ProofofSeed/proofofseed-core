@@ -1,0 +1,239 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
+
+//! Ranged-proving validation, entirely off-device.
+//!
+//! The properties that make ranges resumable, retriable and device-parallel:
+//! the shared ranged builder is byte-identical to zkboo's canonical builder over
+//! the full range; concatenating the ranges of any partition of `0..n`, produced
+//! in independent runs under the same deterministic entropy, reassembles exactly
+//! the canonical proof and verifies; a lone range is not accepted as a complete
+//! proof; and the deterministic entropy derivation is stable across runs, blind
+//! to the range (ranges of one proof must share it), and sensitive to every
+//! challenge-relevant input (statement, family, response count, rounds, binding,
+//! witness, circuit) so re-runs can never pair one run's view seeds with a
+//! different run's challenge.
+
+use proofofseed_circuits::ranged::{
+    WitnessMaterial, deterministic_seed_entropy, ranged_request_digest, request_transcript_digest,
+};
+use proofofseed_circuits::request::{Family, ProofRequest};
+use proofofseed_circuits::{HARDENED_CHILD, hardened_child_circuit, master_key_circuit, public_key_circuit};
+use proofofseed_host::harness::{gen_stream, gen_stream_range, output_of};
+use proofofseed_host::verify;
+use zeroize::Zeroizing;
+
+const N: usize = 6;
+const BINDING: &[u8] = b"ranged-recovery-tx";
+
+/// A representative proof request for the hardened-child test-vector statement,
+/// as the app would parse it (the range is set per test).
+fn request(range: Option<(u16, u16)>) -> ProofRequest {
+    ProofRequest {
+        num_iters: N,
+        rounds: 2048,
+        family: Family::Bip32Secp256k1,
+        path: None,
+        index: None,
+        chain_code: None,
+        binding: BINDING.to_vec(),
+        range,
+    }
+}
+
+/// The deterministic prover entropy the device would derive for [request], via the
+/// same shared functions.
+fn entropy(secrets: &[&[u8]]) -> Zeroizing<[u8; 32]> {
+    let digest = request_transcript_digest(HARDENED_CHILD, &request(Some((0, N as u16))), secrets);
+    deterministic_seed_entropy(&hardened_child_circuit(), &digest)
+}
+
+#[test]
+fn full_range_equals_the_canonical_builder() {
+    let circuit = hardened_child_circuit();
+    let entropy = entropy(&[b"witness-material"]);
+    let full = gen_stream(&circuit, N, &*entropy, BINDING);
+    let ranged = gen_stream_range(&circuit, N, (0, N), &*entropy, BINDING);
+    assert_eq!(full, ranged, "the ranged builder over [0, n) must be byte-identical");
+}
+
+#[test]
+fn a_partition_of_ranges_reassembles_the_proof_and_verifies() {
+    let circuit = hardened_child_circuit();
+    let output = output_of(&circuit);
+    let entropy = entropy(&[b"witness-material"]);
+    let full = gen_stream(&circuit, N, &*entropy, BINDING);
+    // A coarse partition and the all-singletons partition, each segment produced by
+    // an independent prover run (fresh challenge phase included), as separate
+    // devices would.
+    for partition in [vec![(0, 2), (2, 3), (3, 6)], (0..N).map(|i| (i, i + 1)).collect()] {
+        let assembled: Vec<u8> = partition
+            .iter()
+            .flat_map(|&range| gen_stream_range(&circuit, N, range, &*entropy, BINDING))
+            .collect();
+        assert_eq!(assembled, full, "partition {partition:?} must reassemble the proof");
+    }
+    assert!(
+        verify(HARDENED_CHILD, &output, &full, N, BINDING, 0, None, None, 0),
+        "the reassembled proof must verify in the device configuration"
+    );
+}
+
+#[test]
+fn a_lone_range_is_not_a_complete_proof() {
+    let circuit = hardened_child_circuit();
+    let output = output_of(&circuit);
+    let entropy = entropy(&[b"witness-material"]);
+    let segment = gen_stream_range(&circuit, N, (0, 2), &*entropy, BINDING);
+    // Its twin — a genuine 2-response proof — verifies at count 2; the segment
+    // carries the same number of responses but its challenges were derived over all
+    // N commitments, so passing it off as a complete 2-response proof must refuse.
+    let twin = gen_stream(&circuit, 2, &*entropy, BINDING);
+    assert!(
+        verify(HARDENED_CHILD, &output, &twin, 2, BINDING, 0, None, None, 0),
+        "the 2-response twin must verify"
+    );
+    assert!(
+        !verify(HARDENED_CHILD, &output, &segment, 2, BINDING, 0, None, None, 0),
+        "a lone range must not pass as a complete proof of its own length"
+    );
+}
+
+#[test]
+fn a_range_from_a_different_binding_breaks_the_assembled_proof() {
+    let circuit = hardened_child_circuit();
+    let output = output_of(&circuit);
+    // Each run derives its entropy from its own request, as the device would — the
+    // foreign segment differs in binding only.
+    let digest_a = request_transcript_digest(HARDENED_CHILD, &request(Some((0, N as u16))), &[]);
+    let entropy_a = deterministic_seed_entropy(&circuit, &digest_a);
+    let mut foreign_request = request(Some((2, 3)));
+    foreign_request.binding = b"some-other-tx".to_vec();
+    let digest_b = request_transcript_digest(HARDENED_CHILD, &foreign_request, &[]);
+    let entropy_b = deterministic_seed_entropy(&circuit, &digest_b);
+    let assembled: Vec<u8> = [
+        gen_stream_range(&circuit, N, (0, 2), &*entropy_a, BINDING),
+        gen_stream_range(&circuit, N, (2, 3), &*entropy_b, b"some-other-tx"),
+        gen_stream_range(&circuit, N, (3, N), &*entropy_a, BINDING),
+    ]
+    .concat();
+    let genuine: Vec<u8> = [
+        gen_stream_range(&circuit, N, (0, 2), &*entropy_a, BINDING),
+        gen_stream_range(&circuit, N, (2, 3), &*entropy_a, BINDING),
+        gen_stream_range(&circuit, N, (3, N), &*entropy_a, BINDING),
+    ]
+    .concat();
+    assert!(
+        verify(HARDENED_CHILD, &output, &genuine, N, BINDING, 0, None, None, 0),
+        "the all-same-binding assembly must verify"
+    );
+    assert!(
+        !verify(HARDENED_CHILD, &output, &assembled, N, BINDING, 0, None, None, 0),
+        "an assembly containing a foreign-binding range must refuse"
+    );
+}
+
+#[test]
+fn deterministic_entropy_is_stable_and_input_sensitive() {
+    let secrets: &[&[u8]] = &[b"parent-priv", b"chain-code"];
+    let base = request_transcript_digest(HARDENED_CHILD, &request(Some((0, N as u16))), secrets);
+    let again = request_transcript_digest(HARDENED_CHILD, &request(Some((0, N as u16))), secrets);
+    assert_eq!(*base, *again, "the digest must be reproducible across runs");
+    // Blind to the range: ranges of one proof must share their entropy.
+    let other_range = request_transcript_digest(HARDENED_CHILD, &request(Some((2, 3))), secrets);
+    assert_eq!(*base, *other_range, "the digest must not absorb the range");
+    // Sensitive to every challenge-relevant input.
+    let variants: [(&str, ProofRequest); 6] = [
+        ("num_iters", ProofRequest { num_iters: N + 1, ..request(None) }),
+        ("rounds", ProofRequest { rounds: 4, ..request(None) }),
+        ("family", ProofRequest { family: Family::Slip10Ed25519, ..request(None) }),
+        ("path", ProofRequest { path: Some(vec![44]), ..request(None) }),
+        (
+            "index+chain code",
+            ProofRequest { index: Some(7), chain_code: Some([9u8; 32]), ..request(None) },
+        ),
+        ("binding", ProofRequest { binding: b"other".to_vec(), ..request(None) }),
+    ];
+    for (what, req) in variants {
+        let varied = request_transcript_digest(HARDENED_CHILD, &req, secrets);
+        assert_ne!(*base, *varied, "a change of {what} must change the digest");
+    }
+    let other_statement = request_transcript_digest(0, &request(Some((0, N as u16))), secrets);
+    assert_ne!(*base, *other_statement, "a change of statement must change the digest");
+    let other_secrets =
+        request_transcript_digest(HARDENED_CHILD, &request(Some((0, N as u16))), &[b"parent-priv"]);
+    assert_ne!(*base, *other_secrets, "a change of witness material must change the digest");
+    // And the final entropy binds the circuit: the same digest over two different
+    // circuits must never share prover seeds (an app update that changes a circuit
+    // changes the commitments, hence the challenge).
+    let child = deterministic_seed_entropy(&hardened_child_circuit(), &base);
+    let master = deterministic_seed_entropy(&master_key_circuit(), &base);
+    assert_ne!(*child, *master, "the entropy must bind the circuit fingerprint");
+}
+
+#[test]
+fn witness_material_assembly_is_sensitive_to_every_component() {
+    // The device assembles its witness material through the same shared function
+    // (`ranged_request_digest`) exercised here — the seam where the secret enters
+    // the derivation. Every component of every witness shape must move the digest:
+    // an omission would let two different device seeds share prover entropy, which
+    // is the witness-leak condition.
+    let req = request(Some((0, N as u16)));
+    let path: &[u32] = &[0x8000_002c, 0x8000_003c, 0x8000_0000];
+    let child = |parent_priv: &[u8], chain_code: &[u8], index: u32| {
+        ranged_request_digest(
+            HARDENED_CHILD,
+            &req,
+            path,
+            WitnessMaterial::Child { parent_priv, chain_code, index },
+        )
+    };
+    let base = child(&[1u8; 32], &[2u8; 32], 0x8000_0000);
+    assert_eq!(*base, *child(&[1u8; 32], &[2u8; 32], 0x8000_0000), "reproducible");
+    assert_ne!(*base, *child(&[9u8; 32], &[2u8; 32], 0x8000_0000), "parent key must move it");
+    assert_ne!(*base, *child(&[1u8; 32], &[9u8; 32], 0x8000_0000), "chain code must move it");
+    assert_ne!(*base, *child(&[1u8; 32], &[2u8; 32], 0x8000_0001), "child index must move it");
+    let other_path = ranged_request_digest(
+        HARDENED_CHILD,
+        &req,
+        &[0x8000_002c],
+        WitnessMaterial::Child {
+            parent_priv: &[1u8; 32],
+            chain_code: &[2u8; 32],
+            index: 0x8000_0000,
+        },
+    );
+    assert_ne!(*base, *other_path, "the resolved path must move it");
+    let privkey = ranged_request_digest(
+        HARDENED_CHILD,
+        &req,
+        path,
+        WitnessMaterial::Priv { private_key: &[1u8; 32] },
+    );
+    let other_privkey = ranged_request_digest(
+        HARDENED_CHILD,
+        &req,
+        path,
+        WitnessMaterial::Priv { private_key: &[9u8; 32] },
+    );
+    assert_ne!(*privkey, *other_privkey, "the private key must move it");
+    let vector = ranged_request_digest(HARDENED_CHILD, &req, path, WitnessMaterial::TestVector);
+    assert_ne!(*base, *vector, "witness shapes must not collide");
+    assert_ne!(*privkey, *vector, "witness shapes must not collide");
+}
+
+#[test]
+fn full_range_equals_the_canonical_builder_on_an_elephant() {
+    // The byte-equality lock on the ranged builder, pinned on the secp256k1
+    // public-key statement too (a very different circuit shape from the hash
+    // statements — wide words, curve arithmetic, comb tables), including one
+    // skipped response.
+    let circuit = public_key_circuit();
+    let entropy = entropy(&[b"witness-material"]);
+    let full = gen_stream(&circuit, 2, &*entropy, BINDING);
+    let assembled: Vec<u8> = [
+        gen_stream_range(&circuit, 2, (0, 1), &*entropy, BINDING),
+        gen_stream_range(&circuit, 2, (1, 2), &*entropy, BINDING),
+    ]
+    .concat();
+    assert_eq!(assembled, full, "the elephant partition must reassemble the proof");
+}
