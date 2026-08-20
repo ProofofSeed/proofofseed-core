@@ -15,6 +15,8 @@
 //! suffices. The public statement output (e.g. the BIP-32 master key/chain code) is
 //! supplied by the caller.
 
+pub mod statement;
+
 use proofofseed_circuits::request::Family;
 use proofofseed_circuits::{
     BIP39_SEED, ETH_ADDRESS, HARDENED_CHILD, MASTER_KEY, NORMAL_CHILD, PUBLIC_KEY,
