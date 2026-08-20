@@ -489,6 +489,253 @@ pub mod harness {
     pub fn exec_words<C: Circuit>(circuit: &C) -> Words {
         exec::<C, WP>(circuit)
     }
+
+    /// Shared state behind [WriteSink]: the writer, the number of proof bytes
+    /// written, and the first io error (subsequent writes are skipped once an
+    /// error is recorded — the collector API has no error channel, so the caller
+    /// checks after the build).
+    pub struct SinkState<W: std::io::Write> {
+        writer: W,
+        bytes: u64,
+        error: Option<std::io::Error>,
+    }
+
+    impl<W: std::io::Write> core::fmt::Debug for SinkState<W> {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            f.debug_struct("SinkState")
+                .field("bytes", &self.bytes)
+                .field("error", &self.error)
+                .finish()
+        }
+    }
+
+    impl<W: std::io::Write> SinkState<W> {
+        pub fn new(writer: W) -> RefCell<Self> {
+            RefCell::new(Self { writer, bytes: 0, error: None })
+        }
+        fn write(&mut self, data: &[u8]) {
+            if self.error.is_some() {
+                return;
+            }
+            match self.writer.write_all(data) {
+                Ok(()) => self.bytes += data.len() as u64,
+                Err(e) => self.error = Some(e),
+            }
+        }
+        /// Consumes the state, returning the bytes written or the first io error.
+        pub fn finish(self) -> std::io::Result<u64> {
+            match self.error {
+                Some(e) => Err(e),
+                None => Ok(self.bytes),
+            }
+        }
+    }
+
+    /// Prover-side sink streaming the canonical byte encoding (identical to
+    /// [VecSink]'s, i.e. to the device's) into any [std::io::Write] — so proofs
+    /// larger than memory go straight to disk.
+    pub struct WriteSink<'a, W: std::io::Write> {
+        out: &'a RefCell<SinkState<W>>,
+        include_input_share2: bool,
+    }
+
+    impl<'a, W: std::io::Write> core::fmt::Debug for WriteSink<'a, W> {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            f.debug_struct("WriteSink")
+                .field("include_input_share2", &self.include_input_share2)
+                .finish()
+        }
+    }
+
+    impl<'a, W: std::io::Write> WriteSink<'a, W> {
+        fn write_word<Wd: Word, const N: usize>(&self, word: CompositeWord<Wd, N>) {
+            let mut out = self.out.borrow_mut();
+            for wb in word.to_le_bytes() {
+                out.write(wb.as_ref());
+            }
+        }
+    }
+
+    impl<'a, W: std::io::Write> ResponseDataCollector<[u8; 32], [u8; 32]> for WriteSink<'a, W> {
+        type InitArg = &'a RefCell<SinkState<W>>;
+        type FinalizeRes = ();
+        fn new(challenge: Party, sc: [u8; 32], sn: [u8; 32], arg: Self::InitArg) -> Self {
+            {
+                let mut out = arg.borrow_mut();
+                out.write(&[challenge.index() as u8]);
+                out.write(&sc);
+                out.write(&sn);
+            }
+            Self {
+                out: arg,
+                include_input_share2: challenge.index() != 0,
+            }
+        }
+        fn push_input_share2<Wd: Word, const N: usize>(&mut self, word: CompositeWord<Wd, N>) {
+            if self.include_input_share2 {
+                self.write_word(word);
+            }
+        }
+        fn push_and_msg<Wd: Word, const N: usize>(&mut self, word: CompositeWord<Wd, N>) {
+            self.write_word(word);
+        }
+        fn finalize(self, digest: [u8; 32]) {
+            self.out.borrow_mut().write(&digest);
+        }
+    }
+
+    /// [gen_stream], streamed into a writer instead of a `Vec` — byte-identical
+    /// output, constant memory. Returns the number of proof bytes written.
+    pub fn gen_stream_to<C: Circuit, W: std::io::Write>(
+        circuit: &C,
+        n: usize,
+        seed_entropy: &[u8],
+        binding: &[u8],
+        writer: W,
+    ) -> std::io::Result<u64> {
+        gen_stream_range_to(circuit, n, (0, n), seed_entropy, binding, writer)
+    }
+
+    /// [gen_stream_range], streamed into a writer instead of a `Vec` —
+    /// byte-identical output, constant memory. Returns the bytes written.
+    pub fn gen_stream_range_to<C: Circuit, W: std::io::Write>(
+        circuit: &C,
+        n: usize,
+        (start, end): (usize, usize),
+        seed_entropy: &[u8],
+        binding: &[u8],
+        writer: W,
+    ) -> std::io::Result<u64> {
+        let out = SinkState::new(writer);
+        let mut builder = ChallengeBuilder::<H, PS, PV, S, WTP>::new(seed_entropy, binding);
+        for _ in 0..n {
+            let it = builder.next_iter();
+            circuit.exec(it.view_builder());
+            it.finalize();
+        }
+        let challenge_entropy = builder.finalize();
+        let _: Vec<()> = proofofseed_circuits::ranged::build_ranged_proof_hooked::<
+            C,
+            H,
+            PS,
+            PV,
+            S,
+            WriteSink<W>,
+            WTP,
+            zkboo::backend::NoHook,
+        >(circuit, seed_entropy, challenge_entropy, n, (start, end), &out, ());
+        out.into_inner().finish()
+    }
+}
+
+/// Native derivation of witnesses and public parameters from a BIP-39 mnemonic,
+/// implemented by *executing the statement circuits* through zkboo's plain
+/// executor — the same circuits the proofs are about, so derivation cannot drift
+/// from what is proved, and no third-party wallet code enters the trust path.
+/// All returned key material is [Zeroizing]-wrapped.
+pub mod derive {
+    use super::harness::exec_words;
+    use proofofseed_circuits::{
+        HardenedChildCircuit, MasterKeyCircuit, NormalChildCircuit, SeedCircuit,
+        Slip10ChildCircuit, Slip10MasterCircuit,
+    };
+    use zeroize::{Zeroize, Zeroizing};
+    use zkboo::word::Words;
+
+    const HARDENED: u32 = 0x8000_0000;
+
+    /// A derived tree node: private key (32 bytes, big-endian) and chain code.
+    pub struct Node {
+        pub private_key: Zeroizing<[u8; 32]>,
+        pub chain_code: [u8; 32],
+    }
+
+    /// The BIP-39 seed of `mnemonic` under `passphrase` (empty for none), via the
+    /// full 2048-round PBKDF2 circuit.
+    pub fn bip39_seed(mnemonic: &[u8], passphrase: &[u8]) -> Zeroizing<Vec<u8>> {
+        let mut salt = b"mnemonic".to_vec();
+        salt.extend_from_slice(passphrase);
+        let mut words = exec_words(&SeedCircuit {
+            mnemonic: mnemonic.to_vec(),
+            salt,
+            rounds: 2048,
+        });
+        let seed = Zeroizing::new(words.u8.clone());
+        words.u8.zeroize();
+        seed
+    }
+
+    /// Splits a BIP-32 master/child circuit output into a [Node]. The child
+    /// circuits emit the key as four little-endian-ordered u64 limbs; the master
+    /// emits plain bytes.
+    fn bip32_node_of(mut words: Words) -> Node {
+        let mut private_key = Zeroizing::new([0u8; 32]);
+        let chain_code: [u8; 32];
+        if words.u64.len() == 4 {
+            for (i, limb) in words.u64.iter().rev().enumerate() {
+                private_key[8 * i..8 * i + 8].copy_from_slice(&limb.to_be_bytes());
+            }
+            chain_code = words.u8[..32].try_into().expect("chain code bytes");
+        } else {
+            private_key.copy_from_slice(&words.u8[..32]);
+            chain_code = words.u8[32..64].try_into().expect("chain code bytes");
+        }
+        words.u8.zeroize();
+        words.u64.zeroize();
+        Node { private_key, chain_code }
+    }
+
+    /// Walks the BIP-32/secp256k1 tree from `seed` down `path` (hardened bit set
+    /// per component), executing the master, hardened-child and normal-child
+    /// circuits.
+    pub fn bip32_node(seed: &[u8], path: &[u32]) -> Node {
+        let mut node = bip32_node_of(exec_words(&MasterKeyCircuit { seed: seed.to_vec() }));
+        for &index in path {
+            let words = if index & HARDENED != 0 {
+                exec_words(&HardenedChildCircuit {
+                    chain_code: node.chain_code.to_vec(),
+                    parent_priv: node.private_key.to_vec(),
+                    index,
+                })
+            } else {
+                exec_words(&NormalChildCircuit {
+                    chain_code: node.chain_code.to_vec(),
+                    parent_priv: node.private_key.to_vec(),
+                    index,
+                })
+            };
+            node = bip32_node_of(words);
+        }
+        node
+    }
+
+    /// Walks the SLIP-10/ed25519 tree from `seed` down `path`. Every component
+    /// must be hardened (SLIP-10 ed25519 defines nothing else); returns `None`
+    /// for a non-hardened component.
+    pub fn slip10_node(seed: &[u8], path: &[u32]) -> Option<Node> {
+        let words = exec_words(&Slip10MasterCircuit { seed: seed.to_vec() });
+        let mut node = slip10_node_of(words);
+        for &index in path {
+            if index & HARDENED == 0 {
+                return None;
+            }
+            let words = exec_words(&Slip10ChildCircuit {
+                chain_code: node.chain_code.to_vec(),
+                parent_priv: node.private_key.to_vec(),
+                index,
+            });
+            node = slip10_node_of(words);
+        }
+        Some(node)
+    }
+
+    fn slip10_node_of(mut words: Words) -> Node {
+        let mut private_key = Zeroizing::new([0u8; 32]);
+        private_key.copy_from_slice(&words.u8[..32]);
+        let chain_code: [u8; 32] = words.u8[32..64].try_into().expect("chain code bytes");
+        words.u8.zeroize();
+        Node { private_key, chain_code }
+    }
 }
 
 // ---------------------------------------------------------------------------

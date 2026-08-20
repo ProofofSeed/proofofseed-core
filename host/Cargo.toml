@@ -14,14 +14,14 @@ zkboo = { version = "0.1.0", default-features = false, features = [
 zkboo-bip32 = { version = "0.1.0" }
 # Path within this workspace; the version applies on publication.
 proofofseed-circuits = { version = "0.1.0", path = "../circuits" }
+# Zeroizing wrappers on all derived key material.
+zeroize = { version = "1", default-features = false }
 
 [dev-dependencies]
 # For the proof-of-seed diagnostic examples (gate counts, refcounts, prover memory)
 # and the fixed-base comb table generator.
 zkboo-profiling = { version = "0.1.0" }
 zkboo-ecc = { version = "0.1.0" }
-# The ranged tests handle the Zeroizing-wrapped deterministic prover entropy.
-zeroize = { version = "1", default-features = false }
 zkboo-modular = { version = "0.1.0" }
 # Independent BIP-32 reference for the Bitcoin recovery-statement vectors.
 bitcoin = "0.32"

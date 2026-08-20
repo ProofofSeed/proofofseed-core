@@ -53,6 +53,16 @@ Acceptance (all binary, all off-device — items 1 and 5 gate M1b, the rest gate
 4. The number 219 is introduced nowhere. (M1a)
 5. The M1b reconciliation diff against the recorded source commit is empty or every difference is deliberately carried over. (M1b)
 
+## Milestone 2 design rulings (2026-08-20, Stefano)
+
+- **Proof file = the raw device-identical stream** (interop-clean), with a **JSON sidecar** (`<file>.json`) carrying the request transcript, range, entropy mode, versions (crates + `DETERMINISTIC_ENTROPY_VERSION`), stream length and Keccak-256. The sidecar is metadata, never load-bearing for soundness.
+- **Sidecar secrecy rule** (design consequence, applied conservatively): statements whose public output is itself secret material (master key, hardened/normal child, BIP-39 seed) get only an `output_keccak256` commitment in the sidecar — the verifier supplies the expected output out of band and the commitment cross-checks it; the genuinely public outputs (public key, Ethereum address) are stored plainly.
+- **`assemble` is sidecar-driven**: all inputs must share one request transcript and version set; coverage of `[0, N)` is checked (gaps and overlaps refuse); concatenation is verified before the assembled artifact is written.
+- **Seed input channels**: interactive hidden prompt (default), `--seed-file` (plus the existing `PROOFOFSEED_SEED_FILE` convention — the env var names a file, never the secret), and piped stdin (refused on a TTY). Never argv, never the secret in an env var. BIP-39 checksum validated against the embedded English wordlist (checksum SHA-256 computed by executing the zkboo-sha2 circuit — no new hash dependency), with an explicit override flag for non-BIP-39 phrases.
+- **Argument parsing: clap 4 (derive), pinned** — the Rust security-tooling mainstream (sq, cargo-audit, bdk-cli); the parser is off the secret dataflow by construction.
+- Response count: default 438, bounded to the wire format's `[1, 512]` so every CLI request stays device-compatible; `prove --dry-run` plans size/memory before touching a witness, with an optional calibration that times a single response and extrapolates.
+- Library additions to `proofofseed-host` in support (additive only; the neutrality fixture keeps gating): a `Write`-backed streaming sink with `gen_stream_to`/`gen_stream_range_to` (proofs larger than RAM stream to disk), and a `derive` module walking BIP-39/BIP-32/SLIP-10 by executing the statement circuits (no wallet crates in the trust path).
+
 ## Milestone 2 — rust-app (`proofofseed-cli`)
 
 The standalone prover. Mnemonic via file or interactive prompt only (never argv, never env), optional passphrase; family, statement, path/index, binding, response count (default 438), rounds, `--range`; streamed output to file at constant memory; `derive`, `assemble`, `profile`, and dry-run planning as ratified. Statements newly reachable relative to a stock Ledger: master key and full-rounds BIP-39 (the seed itself is a witness here); elephants at host speed. OS RNG replaces the SE TRNG on the rangeless path; ranged requests use the shared deterministic entropy unchanged.
