@@ -73,11 +73,22 @@ fn absorb_bytes(h: &mut Keccak256Hasher, data: &[u8]) {
     h.update(data);
 }
 
-/// The witness material of a resolved request, exactly as the device assembles it
-/// for the entropy derivation — shared so the host tests exercise the same
-/// assembly the device runs (this seam is where the secret enters the derivation:
-/// an omission here would let two different seeds share prover entropy, the
-/// witness-leak condition, which is why it must not live in untestable app code).
+/// The witness material of a resolved request, exactly as every prover (the
+/// device app, the standalone CLI) assembles it for the entropy derivation —
+/// shared so the host tests exercise the same assembly the provers run (this
+/// seam is where the secret enters the derivation: an omission here would let
+/// two different seeds share prover entropy, the witness-leak condition, which
+/// is why it must not live in untestable app code), and so co-proving provers
+/// derive identical entropy.
+///
+/// Shape invariant: the absorbed parts carry no variant tag, so variants are
+/// disambiguated by the absorbed part count *together with the statement byte*
+/// (each statement admits at most one variant per part count: master key is
+/// [WitnessMaterial::TestVector] (1 part, device) or [WitnessMaterial::Seed]
+/// (2, real seed); BIP-39 is TestVector (1) or [WitnessMaterial::Mnemonic] (3);
+/// the child statements are [WitnessMaterial::Child] (4); the key statements are
+/// [WitnessMaterial::Priv] (2)). A new variant must not create a
+/// (statement, part-count) collision with an existing one.
 pub enum WitnessMaterial<'a> {
     /// Statements proved on their public canonical test vector (no device secret).
     TestVector,
@@ -86,6 +97,13 @@ pub enum WitnessMaterial<'a> {
     Child { parent_priv: &'a [u8], chain_code: &'a [u8], index: u32 },
     /// A plain private-key witness (public-key / address statements).
     Priv { private_key: &'a [u8] },
+    /// A real master-seed witness (software-wallet provers; the master-key
+    /// statement against the actual 64-byte BIP-39 seed).
+    Seed { seed: &'a [u8] },
+    /// A real mnemonic witness (software-wallet provers; the BIP-39 statement),
+    /// with its full salt (`"mnemonic" ‖ passphrase`) — the salt is part of the
+    /// witness environment and must move the entropy.
+    Mnemonic { mnemonic: &'a [u8], salt: &'a [u8] },
 }
 
 /// [request_transcript_digest] with the device's exact material assembly: the
@@ -107,6 +125,10 @@ pub fn ranged_request_digest(
             alloc::vec![&path_bytes, parent_priv, chain_code, &index_bytes]
         }
         WitnessMaterial::Priv { private_key } => alloc::vec![&path_bytes, private_key],
+        WitnessMaterial::Seed { seed } => alloc::vec![&path_bytes, seed],
+        WitnessMaterial::Mnemonic { mnemonic, salt } => {
+            alloc::vec![&path_bytes, mnemonic, salt]
+        }
     };
     request_transcript_digest(statement, req, &parts)
 }
