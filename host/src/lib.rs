@@ -172,6 +172,15 @@ fn verify_stream_inner<C: Circuit>(
         }
     }
 
+    // The stream must be exactly `num_iters` responses — no trailing bytes. Without
+    // this a longer proof verifies under a shorter `num_iters`, i.e. a relayer could
+    // downgrade a 438-response proof to a 3-response one by claiming a smaller count
+    // and leaving the rest unread. (The header bound above already rejects a stream
+    // shorter than the count.)
+    if cur.pos != stream.len() {
+        return false;
+    }
+
     // Re-derive the Fiat-Shamir challenges and check they match the proof.
     let challenge_entropy = challenge_hasher.finalize();
     let mut generator = ChallengeGenerator::new(HashPRG::<H>::new(challenge_entropy.as_ref()));

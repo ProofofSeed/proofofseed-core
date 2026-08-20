@@ -53,6 +53,8 @@ Acceptance (all binary, all off-device — items 1 and 5 gate M1b, the rest gate
 4. The number 219 is introduced nowhere. (M1a)
 5. The M1b reconciliation diff against the recorded source commit is empty or every difference is deliberately carried over. (M1b)
 
+**M1b reconciliation carry-backs** (improvements made here that should propagate to ledger-app's psverify at the switch, not silently diverge): `verify_stream` now rejects a proof with unread **trailing bytes** (a soundness-downgrade guard found in the CLI's adversarial review — without it a longer proof verifies under a smaller `num_iters`). This is verifier-side only, changes no proof bytes, and the neutrality gate is unaffected; ledger-app's device verifier should gain the same check when reconciled.
+
 ## Milestone 2 design rulings (2026-08-20, Stefano)
 
 - **Proof file = the raw device-identical stream** (interop-clean), with a **JSON sidecar** (`<file>.json`) carrying the request transcript, range, entropy mode, versions (crates + `DETERMINISTIC_ENTROPY_VERSION`), stream length and Keccak-256. The sidecar is metadata, never load-bearing for soundness.

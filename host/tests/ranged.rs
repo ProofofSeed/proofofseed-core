@@ -171,6 +171,65 @@ fn deterministic_entropy_is_stable_and_input_sensitive() {
 }
 
 #[test]
+fn a_longer_stream_does_not_verify_under_a_smaller_count() {
+    // The soundness-downgrade guard: a proof of N responses must not verify when
+    // checked as fewer — else a relayer downgrades a 438-proof by claiming a
+    // smaller count and leaving the tail unread. Verified via the trailing-byte
+    // rejection in verify_stream.
+    let circuit = hardened_child_circuit();
+    let output = output_of(&circuit);
+    let entropy = entropy(&[b"witness-material"]);
+    let full = gen_stream(&circuit, N, &*entropy, BINDING);
+    assert!(
+        verify(HARDENED_CHILD, &output, &full, N, BINDING, 0, None, None, 0),
+        "the full N-response proof verifies at N"
+    );
+    for smaller in 1..N {
+        assert!(
+            !verify(HARDENED_CHILD, &output, &full, smaller, BINDING, 0, None, None, 0),
+            "the N-response proof must not verify as {smaller} responses"
+        );
+    }
+    // Appended trailing bytes are rejected too.
+    let mut trailed = full.clone();
+    trailed.push(0);
+    assert!(
+        !verify(HARDENED_CHILD, &output, &trailed, N, BINDING, 0, None, None, 0),
+        "a proof with trailing bytes must not verify"
+    );
+}
+
+#[test]
+fn witness_material_shapes_never_collide_across_prover_configurations() {
+    // The (statement, absorbed-part-count) disambiguation invariant, checked
+    // exhaustively over every (statement, material variant) a real prover uses:
+    // the device's test-vector shapes and the CLI's real-witness shapes. All
+    // digests must be pairwise distinct, so no two configurations can share
+    // prover entropy while producing different challenges.
+    use proofofseed_circuits::{BIP39_SEED, ETH_ADDRESS, MASTER_KEY, NORMAL_CHILD, PUBLIC_KEY};
+    const HARD: u32 = 0x8000_0000;
+    let req = request(Some((0, N as u16)));
+    let path: &[u32] = &[HARD | 44, HARD];
+    let sk = &[7u8; 32];
+    let cc = &[8u8; 32];
+    let digests = [
+        ("master/testvector", ranged_request_digest(MASTER_KEY, &req, &[], WitnessMaterial::TestVector)),
+        ("master/seed", ranged_request_digest(MASTER_KEY, &req, &[], WitnessMaterial::Seed { seed: &[9u8; 64] })),
+        ("bip39/testvector", ranged_request_digest(BIP39_SEED, &req, &[], WitnessMaterial::TestVector)),
+        ("bip39/mnemonic", ranged_request_digest(BIP39_SEED, &req, &[], WitnessMaterial::Mnemonic { mnemonic: b"m", salt: b"mnemonic" })),
+        ("hardened/child", ranged_request_digest(HARDENED_CHILD, &req, path, WitnessMaterial::Child { parent_priv: sk, chain_code: cc, index: HARD })),
+        ("normal/child", ranged_request_digest(NORMAL_CHILD, &req, path, WitnessMaterial::Child { parent_priv: sk, chain_code: cc, index: 0 })),
+        ("pubkey/priv", ranged_request_digest(PUBLIC_KEY, &req, path, WitnessMaterial::Priv { private_key: sk })),
+        ("address/priv", ranged_request_digest(ETH_ADDRESS, &req, path, WitnessMaterial::Priv { private_key: sk })),
+    ];
+    for (i, (name_i, di)) in digests.iter().enumerate() {
+        for (name_j, dj) in &digests[i + 1..] {
+            assert_ne!(**di, **dj, "digest collision between {name_i} and {name_j}");
+        }
+    }
+}
+
+#[test]
 fn witness_material_assembly_is_sensitive_to_every_component() {
     // The device assembles its witness material through the same shared function
     // (`ranged_request_digest`) exercised here — the seam where the secret enters
