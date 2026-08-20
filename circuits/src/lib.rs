@@ -185,7 +185,7 @@ pub struct SeedCircuit {
     pub salt: Vec<u8>,
     pub rounds: usize,
 }
-zeroize_on_drop!(SeedCircuit: mnemonic);
+zeroize_on_drop!(SeedCircuit: mnemonic, salt);
 
 impl Circuit for SeedCircuit {
     fn exec<B: Backend>(&self, frontend: &Frontend<B>) {

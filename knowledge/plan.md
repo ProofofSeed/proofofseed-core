@@ -53,7 +53,7 @@ Acceptance (all binary, all off-device — items 1 and 5 gate M1b, the rest gate
 4. The number 219 is introduced nowhere. (M1a)
 5. The M1b reconciliation diff against the recorded source commit is empty or every difference is deliberately carried over. (M1b)
 
-**M1b reconciliation carry-backs** (improvements made here that should propagate to ledger-app's psverify at the switch, not silently diverge): `verify_stream` now rejects a proof with unread **trailing bytes** (a soundness-downgrade guard found in the CLI's adversarial review — without it a longer proof verifies under a smaller `num_iters`). This is verifier-side only, changes no proof bytes, and the neutrality gate is unaffected; ledger-app's device verifier should gain the same check when reconciled.
+**M1b reconciliation carry-backs** (improvements made here that should propagate to ledger-app at the switch, not silently diverge; all verified to change no proof bytes — the neutrality gate still passes): (1) `verify_stream` rejects a proof with unread **trailing bytes** (a soundness-downgrade guard from the CLI's adversarial review — without it a longer proof verifies under a smaller `num_iters`); verifier-side only. (2) `SeedCircuit` now zeroizes its `salt` field as well as `mnemonic` (the salt carries the BIP-39 passphrase); `zeroize_on_drop` affects only `Drop`, not `exec`, so proof bytes are unchanged, and the device's proving path benefits identically.
 
 ## Milestone 2 design rulings (2026-08-20, Stefano)
 
