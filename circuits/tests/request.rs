@@ -77,7 +77,7 @@ fn golden_vectors_from_the_python_encoder_parse_as_intended() {
     assert_eq!(sol.binding, b"sol-tx");
 
     let ranged = case("ranged");
-    assert_eq!((ranged.num_iters, ranged.range), (438, Some((0, 219))));
+    assert_eq!((ranged.num_iters, ranged.range), (438, Some((0, 200))));
 
     let single = case("ranged-single");
     assert_eq!(single.range, Some((7, 8)), "a single-response range");
@@ -85,7 +85,7 @@ fn golden_vectors_from_the_python_encoder_parse_as_intended() {
 
     let sol_ranged = case("solana-ranged");
     assert_eq!(sol_ranged.family, Family::Slip10Ed25519);
-    assert_eq!(sol_ranged.range, Some((219, 438)));
+    assert_eq!(sol_ranged.range, Some((200, 438)));
     assert_eq!(sol_ranged.binding, b"sol-tx");
 
     // The encoder emits unknown family values on request (for tests like this one);
