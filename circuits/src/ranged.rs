@@ -28,8 +28,8 @@
 //! same commitment in every iteration, which reveals nothing beyond the first run.
 //! The danger is the same entropy under a *different* challenge: opening two
 //! different view pairs of the same seeded iteration reconstructs all three input
-//! shares — the witness. The derivation therefore absorbs every input the challenge
-//! depends on, so that *any* change that could move the challenge also moves the
+//! shares — the witness. The derivation therefore absorbs the inputs the challenge
+//! depends on, so that a change that could move the challenge also moves the
 //! entropy: the statement and family, `num_iters` (the challenge hashes that many
 //! commitments), the BIP-39 rounds, the derivation path, the asserted index and
 //! chain code, the binding, the witness itself — and, through
@@ -40,6 +40,19 @@
 //! every commitment, hence the challenge) and [DETERMINISTIC_ENTROPY_VERSION] (this
 //! transcript's own layout). The response range itself is deliberately *not*
 //! absorbed: ranges of the same proof must share the entropy.
+//!
+//! **The invariant this rests on**, which the absorbed material cannot enforce by
+//! itself: *no secret may reach the circuit through `Frontend::input` without also
+//! appearing in the [WitnessMaterial] handed to [request_transcript_digest].* The
+//! circuit fingerprint cannot substitute for it — `zkboo-circuit-hash` ingests the
+//! *type* of each input, never its value — so two circuits differing only in a
+//! compiled-in witness value fingerprint identically and, if that value is not
+//! absorbed here, derive identical entropy under different commitments. That is the
+//! leak condition. It is why [WitnessMaterial::TestVector] absorbs no secret and is
+//! sound only because its witnesses are public constants compiled into the binary:
+//! change one to another value of the same length and the guarantee is gone with no
+//! visible signal. A new statement, or a new witness source for an existing one,
+//! must extend [WitnessMaterial] rather than rely on the fingerprint.
 //!
 //! Residual caveats, stated rather than hidden: mixing app versions across the runs
 //! of one ranged proof is unsupported, and a change to this transcript's own layout
@@ -153,6 +166,15 @@ pub fn request_transcript_digest(
     req: &ProofRequest,
     secrets: &[&[u8]],
 ) -> Zeroizing<[u8; 32]> {
+    // These fields are absorbed narrowed, so a value that does not survive the
+    // narrowing must not reach the hasher: `num_iters` in particular does not change
+    // the circuit fingerprint, so two counts sharing a low 16 bits would derive the
+    // same entropy while phase 1 hashed a different number of commitments — a
+    // different challenge over the same seeds, which is the witness-leak condition.
+    // Every caller in this workspace bounds these already; this function is public,
+    // and a third-party prover reusing it must not be able to walk into that.
+    assert!(req.num_iters <= u16::MAX as usize, "num_iters must fit the transcript");
+    assert!(req.rounds <= u16::MAX as usize, "rounds must fit the transcript");
     let mut h = Keccak256Hasher::new();
     absorb_bytes(&mut h, b"ProofofSeed/ranged-prover-entropy/request/v1");
     h.update(&DETERMINISTIC_ENTROPY_VERSION.to_be_bytes());
@@ -163,6 +185,7 @@ pub fn request_transcript_digest(
     match &req.path {
         None => h.update(&[0]),
         Some(path) => {
+            assert!(path.len() <= u8::MAX as usize, "path depth must fit the transcript");
             h.update(&[1, path.len() as u8]);
             for component in path {
                 h.update(&component.to_be_bytes());

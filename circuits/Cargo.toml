@@ -7,15 +7,15 @@ description = "The six ProofofSeed statements as ZKBoo circuits, with test vecto
 
 [dependencies]
 # Resolved to the local working trees by the workspace root's [patch.crates-io].
-zkboo = { version = "0.1.0", default-features = false, features = [
+zkboo = { version = "1.0.0", default-features = false, features = [
     "u32",
     "u64",
     "keccak",
 ] }
 # Volatile zeroing of the witness key material when a circuit is dropped.
 zeroize = { version = "1", default-features = false }
-zkboo-bip32 = { version = "0.1.0" }
-zkboo-ecc = { version = "0.1.0" }
+zkboo-bip32 = { version = "1.0.0" }
+zkboo-ecc = { version = "1.0.0" }
 # Circuit-structure fingerprinting, bound into the deterministic prover entropy of
 # the ranged proving mode (see src/ranged.rs).
-zkboo-circuit-hash = { version = "0.1.0" }
+zkboo-circuit-hash = { version = "1.0.0" }
