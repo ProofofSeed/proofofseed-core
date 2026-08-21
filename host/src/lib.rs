@@ -356,9 +356,9 @@ pub fn verify(
 ///
 /// The deployment parameter targets 128-bit *post-quantum* soundness: Grover search
 /// over the Fiat-Shamir challenge space gives a quadratic speedup, so the classical
-/// soundness error must be `2^-256` — `n_eps(256) = 438` responses. (The whitepaper's
-/// N_epsilon; `n_eps(128) = 219` is the corresponding 64-bit-PQ / 128-bit-classical
-/// setting used for reduced-size comparisons.)
+/// soundness error must be `2^-256` — `n_eps(256) = 438` responses, the whitepaper's
+/// N_epsilon and the only setting these crates use. Lower arguments are meaningful to
+/// the formula but are not deployment parameters here.
 pub fn n_eps(bits: u32) -> usize {
     (f64::from(bits) / 1.5f64.log2()).ceil() as usize
 }
@@ -959,8 +959,10 @@ mod tests {
     fn soundness_parameter_derivation() {
         // The deployment parameter: 128-bit post-quantum = 2^-256 classical soundness.
         assert_eq!(n_eps(256), 438);
-        // The reduced 64-bit-PQ setting, and a sanity floor.
-        assert_eq!(n_eps(128), 219);
+        // The formula away from the deployment point, and a sanity floor. (Deliberately
+        // not evaluated at 128: that value is a soundness setting this project does not
+        // use, and it is not to appear in these crates.)
+        assert_eq!(n_eps(64), 110);
         assert_eq!(n_eps(1), 2);
     }
 

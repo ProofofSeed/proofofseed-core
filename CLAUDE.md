@@ -2,7 +2,7 @@
 
 The shared proof-of-seed library repo: statement circuits + request/ranged protocol + host prover/verifier, to be consumed by `../ledger-app`, `../rust-app` (`proofofseed-cli`), and `../python-app` (pip `proofofseed`).
 
-**Current state: planning only.** The plan of record is `knowledge/plan.md` (ratified 2026-08-20) — read it before doing anything here. The code to be extracted lives in `../ledger-app` (`circuits/` = the future `proofofseed-circuits`, `host/psverify/` = the future `proofofseed-host` + a PyO3 shim that stays behind).
+**Current state: the library exists and both standalone consumers are built.** The plan of record is `knowledge/plan.md` (ratified 2026-08-20) — read it before doing anything here. The extraction landed as a verified copy of `../ledger-app` (`circuits/` → `proofofseed-circuits`, `host/psverify/` → `proofofseed-host`, with the PyO3 shim left behind in the app), and `../rust-app` and `../python-app` consume it. What has *not* happened is the consumer switch in the app itself: `../ledger-app` still builds against its own copies, so the two trees have to be reconciled deliberately rather than assumed identical — they have already diverged (this library carries `WitnessMaterial::Seed` and `::Mnemonic` for the software-wallet provers, which the app has no use for).
 
 Binding rules for this repo:
 

@@ -6,26 +6,26 @@ license = "LGPL-3.0-or-later"
 description = "Host-side proof-of-seed library: the streaming ZKBoo verifier, the host prover (full and ranged), and executor-based derivation over the shared statement circuits."
 
 [dependencies]
-zkboo = { version = "0.1.0", default-features = false, features = [
+zkboo = { version = "1.0.0", default-features = false, features = [
     "u32",
     "u64",
     "keccak",
 ] }
-zkboo-bip32 = { version = "0.1.0" }
+zkboo-bip32 = { version = "1.0.0" }
 # Path within this workspace; the version applies on publication.
 proofofseed-circuits = { version = "0.1.0", path = "../circuits" }
 # Zeroizing wrappers on all derived key material.
 zeroize = { version = "1", default-features = false }
 # Proof-size/memory numbers exposed by the shared statement plumbing (profiling,
 # dry-run planning) rather than re-derived by each frontend.
-zkboo-profiling = { version = "0.1.0" }
+zkboo-profiling = { version = "1.0.0" }
 # OS randomness for fresh (rangeless) prover entropy.
 getrandom = "0.2"
 
 [dev-dependencies]
 # For the proof-of-seed diagnostic examples (gate counts, refcounts, prover memory)
 # and the fixed-base comb table generator.
-zkboo-ecc = { version = "0.1.0" }
-zkboo-modular = { version = "0.1.0" }
+zkboo-ecc = { version = "1.0.0" }
+zkboo-modular = { version = "1.0.0" }
 # Independent BIP-32 reference for the Bitcoin recovery-statement vectors.
 bitcoin = "0.32"

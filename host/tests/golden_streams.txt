@@ -1,16 +1,23 @@
 # Proof-byte-neutrality golden fixtures for the extraction from ledger-app.
-# Recorded from the UNTOUCHED ledger-app source tree at commit 86a4656 (branch
-# bitcoin-and-solana-recovery-statements) by a one-shot generator over its
-# psverify/pos-circuits crates; each row is `name byte_length keccak256(stream)`.
-# The extracted crates must reproduce every stream byte-identically
-# (tests/golden_streams.rs). Regenerating this file requires the pre-extraction
-# source tree — never regenerate it from this repo's own code.
+# Recorded from the ledger-app source tree, which is the source of truth for these
+# bytes, by `cargo run --release -p psverify --example golden_streams` in that tree;
+# each row is `name byte_length keccak256(stream)`. The extracted crates must
+# reproduce every stream byte-identically (tests/golden_streams.rs). Never regenerate
+# this file from this repository's own code — that would make the check circular and
+# assert nothing.
+#
+# First recorded at ledger-app 86a4656 (the extraction acceptance). Re-recorded
+# 2026-08-21 at ledger-app 130cb2e, where the deterministic-entropy transcript began
+# absorbing zkboo's PROOF_FORMAT_VERSION: that moves the `derived/` rows by design and
+# must leave the `raw/` rows alone, which it did — those four are unchanged from the
+# original recording, including the ranged elephant slice, and they are the control on
+# any future change that is meant to touch only one of the two groups.
 raw/master_key/n2 102594 446f846c799db0bfd14f1826d4cdda0811aa6b9b1691e958e8e3c765be63792a
 raw/bip39-r2/n2 153980 7dff1489a76560df2e534acae6cff53511423ec3d11db6db4feedab1f352f752
-derived/hardened_child/n4/full 206700 5bca59822c6798cdfb9c37335397de9852cca41d0b0a28a1e50b8b506e33be3e
-derived/hardened_child/n4/seg0-2 103318 5ac8eb16ef3b681a8730e1d530fe14c0eb9d3d316b039bf6b40e88b14ab755bb
-derived/hardened_child/n4/seg2-3 51691 bcefca460b853e75e744e2f31f302e22c5c480df854ccf54aad2e7862122c8f4
-derived/hardened_child/n4/seg3-4 51691 0fc6c1a5cabe75f419cb7ce0b566b3a490952f0b2f592e3bdae70dcb42b104f7
-derived/slip10_child/n4/full 205252 f44ae598dd530d261cbe55e793b681b1561061ed5f82758928940203e8dad86c
+derived/hardened_child/n4/full 206700 faffe426f06c5940c407fbd2c8697d8882f3b98d6f89833d1d8888b576f9fc7a
+derived/hardened_child/n4/seg0-2 103350 b619eacb63ccad6e06d29cf98ae6eb3a4ac425f7ea91ca2952ad45b02cf2afbd
+derived/hardened_child/n4/seg2-3 51659 de223c76c0537c0c5a49b667cb6b212630b35162c06f3150f969b5e14d8318ed
+derived/hardened_child/n4/seg3-4 51691 e84b76d1847acb6c1dc2292bfbc8eedb8340eec0c417226bd0938bb00b33527e
+derived/slip10_child/n4/full 205220 634a312789bc05b4c4f7fdfa509faecdd96638e29bfe26f5af18515ef801ca16
 raw/public_key/n2/full 22560252 a33229766340eb88b3c8909dfaee6b0dd634f7def63c68796a4fb97b4cd26abd
 raw/public_key/n2/seg1-2 11280126 769c8d5c05841f2dbd05fc931a90d1832ae7618ed321df2d195eeb0c9d8d9776

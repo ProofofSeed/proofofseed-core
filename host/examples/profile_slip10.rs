@@ -18,7 +18,6 @@ fn report(name: &str, prof: &ProfilingData) {
     println!("\n── {name} ────────────────────────────────");
     println!("  max individual refcount : {:?}", prof.max_refcount());
     println!("  response size (D=S=32B) : {} B", prof.response_size::<D, S>());
-    println!("  proof size @219         : {:.1} MiB", prof.proof_size::<D, S>(219) as f64 / (1024.0 * 1024.0));
     println!("  proof size @438         : {:.1} MiB", prof.proof_size::<D, S>(438) as f64 / (1024.0 * 1024.0));
     println!("  prover mem (RC=u8)      : {} B", prof.prover_mem_usage::<u8>().total());
     println!("  executor mem (RC=u8)    : {} B", prof.executor_mem_usage::<u8>().total());

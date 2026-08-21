@@ -69,8 +69,7 @@ impl Circuit for Ed25519Pubkey {
 fn report(name: &str, prof: &ProfilingData) {
     let resp = prof.response_size::<D, S>();
     println!(
-        "{name:34} {resp:>11} B   @219 {:>8.1} MiB   @438 {:>8.1} MiB   prover mem (RC=u8) {:>6} B",
-        prof.proof_size::<D, S>(219) as f64 / (1024.0 * 1024.0),
+        "{name:34} {resp:>11} B   @438 {:>8.1} MiB   prover mem (RC=u8) {:>6} B",
         prof.proof_size::<D, S>(438) as f64 / (1024.0 * 1024.0),
         prof.prover_mem_usage::<u8>().total(),
     );
@@ -78,7 +77,7 @@ fn report(name: &str, prof: &ProfilingData) {
 
 fn main() {
     println!(
-        "statement                            bytes/resp        proof @219       proof @438     prover mem\n"
+        "statement                            bytes/resp        proof @438     prover mem\n"
     );
     println!("Bitcoin / Solana address bindings (elephants):");
     report("pubkey_hash160 (P2PKH/P2WPKH)", &profile(&PubkeyHash160));
