@@ -11,6 +11,8 @@
 //!   emitting any sub-range must still run the full challenge phase; only the
 //!   response phase is restricted to the range. Skipping the responses before
 //!   `start` costs one PRG step and one challenge draw each — no circuit execution.
+//!   The skipping itself is zkboo's (`ProofBuilder::skip_iters`); this module only
+//!   supplies the request-keyed entropy the ranges must share.
 //!
 //! - **Ranges only compose under identical prover entropy.** Responses produced in
 //!   different runs (or on different devices) verify as one proof only if every run
@@ -33,16 +35,17 @@
 //! chain code, the binding, the witness itself — and, through
 //! [deterministic_seed_entropy], the circuit's structural fingerprint (an app
 //! update that changes a circuit, e.g. a gate-level optimisation, changes the
-//! commitments too) and [DETERMINISTIC_ENTROPY_VERSION], to be bumped on any change
-//! to the proof byte format or commitment scheme that the fingerprint cannot see.
-//! The response range itself is deliberately *not* absorbed: ranges of the same
-//! proof must share the entropy.
+//! commitments too), [zkboo::PROOF_FORMAT_VERSION] (a change to the emitted response
+//! bytes or the commitment preimages is invisible to a circuit fingerprint but moves
+//! every commitment, hence the challenge) and [DETERMINISTIC_ENTROPY_VERSION] (this
+//! transcript's own layout). The response range itself is deliberately *not*
+//! absorbed: ranges of the same proof must share the entropy.
 //!
-//! Residual caveats, stated rather than hidden: a proof-system change that alters
-//! neither the circuit structure nor this module's constants would silently
-//! decorrelate the challenge from the entropy across app versions — the version
-//! constant is the manual guard, and mixing app versions across runs of one ranged
-//! proof is unsupported. And unlike the TRNG mode, a deterministic prover re-runs
+//! Residual caveats, stated rather than hidden: mixing app versions across the runs
+//! of one ranged proof is unsupported, and a change to this transcript's own layout
+//! still relies on [DETERMINISTIC_ENTROPY_VERSION] being bumped by hand — only the
+//! proof format is now tracked mechanically. And unlike the TRNG mode, a
+//! deterministic prover re-runs
 //! identically, so a fault injected into a later run's challenge phase could in
 //! principle steer reopenings; the TRNG mode therefore remains the default for
 //! full-sequence proofs, and ranged mode is opt-in per request.
@@ -50,22 +53,27 @@
 use crate::request::ProofRequest;
 use alloc::vec::Vec;
 use zeroize::{Zeroize, Zeroizing};
-use zkboo::backend::{Backend, BackendHook, Hooked};
+use zkboo::backend::BackendHook;
 use zkboo::circuit::Circuit;
 use zkboo::crypto::{
-    GeneratesRandom, HashPRG, Hasher, Keccak256Hasher, PseudoRandomGenerator, Seed,
+    Hasher, Keccak256Hasher, PseudoRandomGenerator, Seed,
 };
-use zkboo::prover::challenge::{ChallengeGenerator, Party};
+use zkboo::prover::proof::ProofBuilder;
 use zkboo::prover::proof::collectors::ResponseDataCollector;
-use zkboo::prover::views::{ViewBuilderBackend, WordTriplePool, collectors::ResponseDataSelector};
+use zkboo::prover::views::WordTriplePool;
 use zkboo_circuit_hash::hash_circuit;
 
-/// Version of the deterministic-entropy transcript. Bump on ANY change to the proof
-/// byte format or commitment scheme that [hash_circuit] cannot observe (it
-/// fingerprints circuit structure only), so proofs from different proof-system
-/// versions never share prover entropy. The adoption of the ZKB++ view commitment
-/// is an example of exactly such a change.
-pub const DETERMINISTIC_ENTROPY_VERSION: u32 = 1;
+/// Version of *this module's* entropy transcript — the field layout that
+/// [request_transcript_digest] absorbs. Bump on any change to what the transcript
+/// absorbs, or to how, so that two app versions deriving entropy differently can
+/// never collide.
+///
+/// This no longer has to track the proof *format*: the transcript absorbs
+/// [zkboo::PROOF_FORMAT_VERSION] directly, so a change to the emitted response bytes
+/// or the commitment preimages moves the entropy mechanically, whether or not anyone
+/// remembers to touch this constant. That coupling is what the format constant exists
+/// for, and hand-tracking it here was the previous arrangement (version `1`).
+pub const DETERMINISTIC_ENTROPY_VERSION: u32 = 2;
 
 /// Absorbs a length-prefixed byte string.
 fn absorb_bytes(h: &mut Keccak256Hasher, data: &[u8]) {
@@ -148,6 +156,7 @@ pub fn request_transcript_digest(
     let mut h = Keccak256Hasher::new();
     absorb_bytes(&mut h, b"ProofofSeed/ranged-prover-entropy/request/v1");
     h.update(&DETERMINISTIC_ENTROPY_VERSION.to_be_bytes());
+    h.update(&zkboo::PROOF_FORMAT_VERSION.to_be_bytes());
     h.update(&[statement, req.family as u8]);
     h.update(&(req.num_iters as u16).to_be_bytes());
     h.update(&(req.rounds as u16).to_be_bytes());
@@ -206,12 +215,17 @@ pub fn deterministic_seed_entropy<C: Circuit>(
 
 /// Builds the responses `[start, end)` of the `num_iters`-response proof determined
 /// by `seed_entropy` and `challenge_entropy`, streaming each response through the
-/// [ResponseDataCollector]. With `start = 0, end = num_iters` the emitted bytes are
-/// identical to zkboo's `build_proof_custom_hooked` (locked by a psverify test);
-/// the responses before `start` are skipped by advancing the seed PRG and the
-/// challenge generator without executing the circuit, exactly one draw each — the
-/// iteration recipe replicated here from zkboo's `ProofBuilder`, which does not
-/// (yet) expose a ranged entry point of its own.
+/// [ResponseDataCollector].
+///
+/// A thin wrapper over zkboo's own [ProofBuilder]: the responses outside the range
+/// are skipped with [ProofBuilder::skip_iters], which advances the seed and challenge
+/// streams past an iteration without executing the circuit. With
+/// `start = 0, end = num_iters` the emitted bytes are identical to
+/// `build_proof_custom_hooked` (locked by a psverify test).
+///
+/// Skipping the tail and finalizing is not ceremony: [ProofBuilder::finalize] checks
+/// that every iteration was either yielded or skipped, so a range that does not add
+/// up fails here rather than producing a proof that silently will not verify.
 pub fn build_ranged_proof_hooked<C, H, PS, PV, S, RDC, WTP, BH>(
     circuit: &C,
     seed_entropy: &[u8],
@@ -235,21 +249,21 @@ where
         start <= end && end <= num_iters,
         "response range [{start}, {end}) out of bounds for {num_iters} responses"
     );
-    let mut seed_prg = PS::new(seed_entropy);
-    let mut challenge_generator = ChallengeGenerator::new(HashPRG::<H>::new(&challenge_entropy));
-    for _ in 0..start {
-        let _seeds: Zeroizing<[S; 3]> = Zeroizing::new(seed_prg.next());
-        let _: Party = challenge_generator.next();
-    }
+    let mut builder = ProofBuilder::<H, PS, PV, S, RDC, WTP, BH>::new_with_arg_hooked(
+        seed_entropy,
+        challenge_entropy,
+        num_iters,
+        collector_init_arg,
+        hook_init_arg,
+    );
+    builder.skip_iters(start);
     let mut res_vec = Vec::with_capacity(end - start);
     for _ in start..end {
-        let seeds: Zeroizing<[S; 3]> = Zeroizing::new(seed_prg.next());
-        let challenge: Party = challenge_generator.next();
-        let backend: ViewBuilderBackend<H, PV, S, ResponseDataSelector<H::Digest, S, RDC>, WTP> =
-            ViewBuilderBackend::new_with_arg(seeds, (challenge, collector_init_arg));
-        let frontend = Hooked::new(BH::new(hook_init_arg), backend).into_frontend();
-        circuit.exec(&frontend);
-        res_vec.push(frontend.finalize());
+        let iter = builder.next_iter().expect("an iteration within the range remains");
+        circuit.exec(iter.view_builder());
+        res_vec.push(iter.finalize());
     }
+    builder.skip_remaining_iters();
+    builder.finalize();
     res_vec
 }
