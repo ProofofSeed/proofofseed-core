@@ -34,6 +34,21 @@ use zkboo::word::{CompositeWord, Word};
 
 static CURRENT: AtomicUsize = AtomicUsize::new(0);
 static PEAK: AtomicUsize = AtomicUsize::new(0);
+/// Live allocation count, and the count at the moment the peak was set. Together with
+/// the peak these bound how much of the figure can depend on pointer width: a peak made
+/// of a few large word buffers is nearly pointer-independent, while one made of thousands
+/// of small nodes is not.
+static LIVE: AtomicUsize = AtomicUsize::new(0);
+static LIVE_AT_PEAK: AtomicUsize = AtomicUsize::new(0);
+
+/// A slot table of the currently-live allocations, so the *sizes* making up the peak can
+/// be read off. There are only a few dozen of them, and knowing which buffers they are is
+/// what decides whether the figure depends on pointer width: a buffer of circuit words is
+/// the same size on a 32-bit device, while a buffer of `usize` indices halves.
+const SLOTS: usize = 512;
+static SLOT_PTR: [AtomicUsize; SLOTS] = [const { AtomicUsize::new(0) }; SLOTS];
+static SLOT_SIZE: [AtomicUsize; SLOTS] = [const { AtomicUsize::new(0) }; SLOTS];
+static SNAPSHOT: [AtomicUsize; SLOTS] = [const { AtomicUsize::new(0) }; SLOTS];
 
 struct Tracking;
 unsafe impl GlobalAlloc for Tracking {
@@ -41,12 +56,34 @@ unsafe impl GlobalAlloc for Tracking {
         let p = unsafe { System.alloc(l) };
         if !p.is_null() {
             let cur = CURRENT.fetch_add(l.size(), Ordering::Relaxed) + l.size();
-            PEAK.fetch_max(cur, Ordering::Relaxed);
+            let live = LIVE.fetch_add(1, Ordering::Relaxed) + 1;
+            for i in 0..SLOTS {
+                if SLOT_PTR[i].load(Ordering::Relaxed) == 0 {
+                    SLOT_PTR[i].store(p as usize, Ordering::Relaxed);
+                    SLOT_SIZE[i].store(l.size(), Ordering::Relaxed);
+                    break;
+                }
+            }
+            if cur > PEAK.load(Ordering::Relaxed) {
+                PEAK.store(cur, Ordering::Relaxed);
+                LIVE_AT_PEAK.store(live, Ordering::Relaxed);
+                for i in 0..SLOTS {
+                    SNAPSHOT[i].store(SLOT_SIZE[i].load(Ordering::Relaxed), Ordering::Relaxed);
+                }
+            }
         }
         p
     }
     unsafe fn dealloc(&self, p: *mut u8, l: Layout) {
         CURRENT.fetch_sub(l.size(), Ordering::Relaxed);
+        LIVE.fetch_sub(1, Ordering::Relaxed);
+        for i in 0..SLOTS {
+            if SLOT_PTR[i].load(Ordering::Relaxed) == p as usize {
+                SLOT_PTR[i].store(0, Ordering::Relaxed);
+                SLOT_SIZE[i].store(0, Ordering::Relaxed);
+                break;
+            }
+        }
         unsafe { System.dealloc(p, l) };
     }
 }
@@ -78,6 +115,7 @@ const DEVICE_HEAP: usize = 18_944;
 
 fn peak_of<C: Circuit>(label: &str, circuit: &C) {
     PEAK.store(CURRENT.load(Ordering::Relaxed), Ordering::Relaxed);
+    LIVE_AT_PEAK.store(0, Ordering::Relaxed);
     let _: Vec<()> = prove_custom::<C, H, HashPRG<H>, HashPRG<H>, S, DiscardSink, WTP>(
         circuit,
         1,
@@ -86,12 +124,24 @@ fn peak_of<C: Circuit>(label: &str, circuit: &C) {
         (),
     );
     let peak = PEAK.load(Ordering::Relaxed);
+    let live = LIVE_AT_PEAK.load(Ordering::Relaxed);
     let verdict = if peak < DEVICE_HEAP {
         format!("fits, {} B spare", DEVICE_HEAP - peak)
     } else {
         format!("OVER by {} B", peak - DEVICE_HEAP)
     };
-    println!("  {label:<44} {peak:>7} B ({:>5.1} KiB)  {verdict}", peak as f64 / 1024.0);
+    println!(
+        "  {label:<40} {peak:>7} B  {live:>4} live ({:>4} B avg)  {verdict}",
+        if live > 0 { peak / live } else { 0 },
+    );
+    if label.starts_with("normal child, precomputed") {
+        let mut sizes: Vec<usize> =
+            SNAPSHOT.iter().map(|s| s.load(Ordering::Relaxed)).filter(|&n| n > 0).collect();
+        sizes.sort_unstable_by(|a, b| b.cmp(a));
+        println!("      the buffers making up that peak, largest first:");
+        println!("      {sizes:?}");
+        println!("      sum {} B over {} buffers", sizes.iter().sum::<usize>(), sizes.len());
+    }
 }
 
 fn main() {
