@@ -14,9 +14,10 @@
 //! — each is paired with the positive that shows the difference is the shape and not
 //! some unrelated breakage.
 //!
-//! ⚠️ The BIP-39 salt (`"mnemonic" ‖ passphrase`) is likewise public, so proving that
-//! statement under a passphrase discloses the passphrase to the verifier. The
-//! wrong-salt negative below is what makes that concrete.
+//! The BIP-39 salt is witness, so a verifier is told only its *length*. It used to be a
+//! public circuit constant, which published the user's passphrase to whoever verified the
+//! proof; the wrong-length negative below is what keeps the length from being guessed
+//! instead of stated.
 
 use proofofseed_circuits::{
     BIP39_SEED, MASTER_KEY, MasterKeyCircuit, SeedCircuit, Slip10MasterCircuit, bip39_salt_for,
@@ -94,9 +95,9 @@ fn a_bip39_proof_of_a_real_mnemonic_verifies_when_the_shape_and_salt_are_given()
         verify_with_shape(
             BIP39_SEED, &output, &stream, N, BINDING, 2, None, None, 0,
             Some(MNEMONIC.len()),
-            Some(&salt),
+            Some(salt.len()),
         ),
-        "a real mnemonic must verify under its own length and salt",
+        "a real mnemonic must verify under its own lengths",
     );
     assert!(
         !verify(BIP39_SEED, &output, &stream, N, BINDING, 2, None, None, 0),
@@ -106,15 +107,15 @@ fn a_bip39_proof_of_a_real_mnemonic_verifies_when_the_shape_and_salt_are_given()
         !verify_with_shape(
             BIP39_SEED, &output, &stream, N, BINDING, 2, None, None, 0,
             Some(MNEMONIC.len()),
-            Some(&bip39_salt_for(b"TREZOR")),
+            Some(bip39_salt_for(b"TREZOR").len()),
         ),
-        "a different passphrase is a different circuit — which is why the salt is public",
+        "a passphrase of a different length is a different circuit",
     );
     assert!(
         !verify_with_shape(
             BIP39_SEED, &output, &stream, N, BINDING, 2, None, None, 0,
             Some(MNEMONIC.len() - 1),
-            Some(&salt),
+            Some(salt.len()),
         ),
         "a wrong mnemonic length must not verify",
     );
@@ -129,10 +130,67 @@ fn half_a_bip39_shape_is_refused_rather_than_guessed() {
     let circuit = SeedCircuit { mnemonic: MNEMONIC.to_vec(), salt: salt.clone(), rounds: 2 };
     let output = output_of(&circuit);
     let stream = gen_stream(&circuit, N, b"entropy-b39b", BINDING);
-    for (len, s) in [(Some(MNEMONIC.len()), None), (None, Some(&salt[..]))] {
+    for (len, s) in [(Some(MNEMONIC.len()), None), (None, Some(salt.len()))] {
         assert!(
             !verify_with_shape(BIP39_SEED, &output, &stream, N, BINDING, 2, None, None, 0, len, s),
             "half a shape must be refused",
         );
     }
+}
+
+
+#[test]
+fn the_passphrase_never_reaches_the_verifier() {
+    // The property the salt was made witness for. Two provers whose passphrases differ
+    // but are the same length build the *same* circuit, so a verifier — who is handed
+    // only the lengths — cannot tell them apart, and is never given the passphrase to
+    // begin with. When the salt was a public constant it was in the circuit, so it had
+    // to be handed over for the circuit to be rebuilt at all.
+    use zkboo::crypto::Keccak256Hasher;
+    use zkboo_circuit_hash::hash_circuit;
+
+    let one = SeedCircuit {
+        mnemonic: MNEMONIC.to_vec(),
+        salt: bip39_salt_for(b"hunter2!"),
+        rounds: 2,
+    };
+    let two = SeedCircuit {
+        mnemonic: MNEMONIC.to_vec(),
+        salt: bip39_salt_for(b"correct!"),
+        rounds: 2,
+    };
+    assert_eq!(bip39_salt_for(b"hunter2!").len(), bip39_salt_for(b"correct!").len());
+    assert_eq!(
+        hash_circuit::<_, Keccak256Hasher>(&one),
+        hash_circuit::<_, Keccak256Hasher>(&two),
+        "same-length passphrases must be indistinguishable in the circuit",
+    );
+
+    // And the length is not hidden: that is the residual disclosure, stated rather than
+    // wished away.
+    let longer = SeedCircuit {
+        mnemonic: MNEMONIC.to_vec(),
+        salt: bip39_salt_for(b"a-much-longer-passphrase"),
+        rounds: 2,
+    };
+    assert_ne!(
+        hash_circuit::<_, Keccak256Hasher>(&one),
+        hash_circuit::<_, Keccak256Hasher>(&longer),
+        "a different passphrase length is a different circuit",
+    );
+
+    // Each still proves its own statement and not the other's.
+    let out_one = output_of(&one);
+    let stream_one = gen_stream(&one, N, b"entropy-p1", BINDING);
+    let len = (MNEMONIC.len(), bip39_salt_for(b"hunter2!").len());
+    assert!(verify_with_shape(
+        BIP39_SEED, &out_one, &stream_one, N, BINDING, 2, None, None, 0, Some(len.0), Some(len.1),
+    ));
+    assert!(
+        !verify_with_shape(
+            BIP39_SEED, &output_of(&two), &stream_one, N, BINDING, 2, None, None, 0, Some(len.0),
+            Some(len.1),
+        ),
+        "the proof is still bound to its own seed",
+    );
 }

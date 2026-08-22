@@ -8,6 +8,15 @@
 # implementation to record from: the fixture is now a historical anchor to the bytes
 # ledger-app@86a4656 produced, and re-recording means checking that commit out.
 #
+# Re-anchored 2026-08-22, one row only: `raw/bip39-r2/n2` moved from 153,980 B when the
+# BIP-39 statement's PBKDF2 salt became witness instead of a public circuit constant.
+# The salt is "mnemonic" followed by the passphrase, so as a constant it was published to
+# whoever verified the proof. The move is +28 B over two responses = +14 B per response,
+# and the test vector's salt is 14 bytes ("mnemonicTREZOR"): one input-share byte per
+# salt byte, which is the whole of the cost. The other eight rows did not move, and the
+# test now reports every row rather than stopping at the first, so that "only this one
+# moved" is something it establishes rather than something the reader assumes.
+#
 # First recorded at ledger-app 86a4656 (the extraction acceptance). Re-recorded
 # 2026-08-21 at ledger-app 130cb2e, where the deterministic-entropy transcript began
 # absorbing zkboo's PROOF_FORMAT_VERSION: that moves the `derived/` rows by design and
@@ -15,7 +24,7 @@
 # original recording, including the ranged elephant slice, and they are the control on
 # any future change that is meant to touch only one of the two groups.
 raw/master_key/n2 102594 446f846c799db0bfd14f1826d4cdda0811aa6b9b1691e958e8e3c765be63792a
-raw/bip39-r2/n2 153980 7dff1489a76560df2e534acae6cff53511423ec3d11db6db4feedab1f352f752
+raw/bip39-r2/n2 154008 9cbcee782163f0d2a588e89a582f619451ca8d308d39fe2fdcb515f379281d75
 derived/hardened_child/n4/full 206700 faffe426f06c5940c407fbd2c8697d8882f3b98d6f89833d1d8888b576f9fc7a
 derived/hardened_child/n4/seg0-2 103350 b619eacb63ccad6e06d29cf98ae6eb3a4ac425f7ea91ca2952ad45b02cf2afbd
 derived/hardened_child/n4/seg2-3 51659 de223c76c0537c0c5a49b667cb6b212630b35162c06f3150f969b5e14d8318ed

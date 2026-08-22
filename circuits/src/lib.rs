@@ -26,7 +26,8 @@ use zkboo::backend::{Backend, Frontend};
 use zkboo::circuit::Circuit;
 use zkboo::word::Words;
 use zkboo_bip32::{
-    be_bytes_to_word, bip39_seed, ethereum_address_with_tables, hardened_child_key, master_key,
+    be_bytes_to_word, bip39_seed_with_salt_words, ethereum_address_with_tables,
+    hardened_child_key, master_key,
     normal_child_key_with_tables, public_key_with_tables, slip10_ed25519_child,
     slip10_ed25519_master, HARDENED_OFFSET,
 };
@@ -209,6 +210,19 @@ impl<T: CombTableSource> Circuit for NormalChildCircuit<T> {
 }
 
 /// BIP-39 seed via PBKDF2-HMAC-SHA512. Output: 64 u8.
+///
+/// **The salt is witness, not a public parameter.** The BIP-39 salt is
+/// `"mnemonic" ‖ passphrase`, and a verifier needs every public circuit constant to
+/// rebuild the circuit — so allocating the salt, as this statement once did, published
+/// the user's passphrase to whoever verified the proof. Supplying it as witness costs
+/// one byte per salt byte per response (~20 B on a 52 MB response; see
+/// `examples/salt_secrecy_cost.rs`) and discloses only the salt's *length*.
+///
+/// What that gives up is the verifier's certainty that the salt's first eight bytes
+/// spell `"mnemonic"`. Nothing rests on it: a prover using some other eight-byte salt
+/// derives a different seed, and the seed is pinned by whatever consumes it, while
+/// PBKDF2 is one-way so it cannot be steered to a target. The length still separates
+/// "no passphrase" (8 B) from "passphrase" in practice.
 pub struct SeedCircuit {
     pub mnemonic: Vec<u8>,
     pub salt: Vec<u8>,
@@ -223,7 +237,9 @@ impl Circuit for SeedCircuit {
             .iter()
             .map(|&b| frontend.input(b))
             .collect::<Vec<_>>();
-        let seed = bip39_seed(frontend.allocator(), mnemonic, &self.salt, self.rounds);
+        let salt = self.salt.iter().map(|&b| frontend.input(b)).collect::<Vec<_>>();
+        let seed =
+            bip39_seed_with_salt_words(frontend.allocator(), mnemonic, salt, self.rounds);
         seed.into_iter().for_each(|w| frontend.output(w));
     }
 }
@@ -421,19 +437,22 @@ pub fn slip10_master_verify_circuit(seed_len: usize) -> Slip10MasterCircuit {
     Slip10MasterCircuit { seed: alloc::vec![0u8; seed_len] }
 }
 
-/// BIP-39 seed verifier circuit for a mnemonic of `mnemonic_len` bytes under `salt`.
+/// BIP-39 seed verifier circuit for a mnemonic of `mnemonic_len` bytes and a salt of
+/// `salt_len` bytes.
 ///
-/// ⚠️ **The salt is a public parameter, and the salt is `"mnemonic" ‖ passphrase`.** The
-/// circuit allocates it as constants, so a verifier must know it to rebuild the circuit,
-/// and proving this statement under a BIP-39 passphrase therefore discloses that
-/// passphrase. The mnemonic's *length* is public for the same reason the seed's is. Only
-/// the mnemonic bytes are witness.
+/// Both lengths are public — the circuit allocates one input per witness byte — while
+/// neither the mnemonic nor the salt is. The verifier therefore never learns the
+/// passphrase, only how long it is (`salt_len - 8`).
 pub fn bip39_seed_verify_circuit(
     mnemonic_len: usize,
-    salt: Vec<u8>,
+    salt_len: usize,
     rounds: usize,
 ) -> SeedCircuit {
-    SeedCircuit { mnemonic: alloc::vec![0u8; mnemonic_len], salt, rounds }
+    SeedCircuit {
+        mnemonic: alloc::vec![0u8; mnemonic_len],
+        salt: alloc::vec![0u8; salt_len],
+        rounds,
+    }
 }
 
 /// The BIP-39 PBKDF2 salt for `passphrase`: the constant `"mnemonic"` followed by the

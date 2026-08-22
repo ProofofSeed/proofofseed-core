@@ -14,7 +14,9 @@ zkboo = { version = "1.0.0", default-features = false, features = [
 ] }
 # Volatile zeroing of the witness key material when a circuit is dropped.
 zeroize = { version = "1", default-features = false }
-zkboo-bip32 = { version = "1.0.0" }
+# 1.1.0 for `bip39_seed_with_salt_words`: the BIP-39 salt is witness here, and the
+# 1.0.0 entry point can only allocate it as public constants.
+zkboo-bip32 = { version = "1.1.0" }
 zkboo-ecc = { version = "1.0.0" }
 # Circuit-structure fingerprinting, bound into the deterministic prover entropy of
 # the ranged proving mode (see src/ranged.rs).

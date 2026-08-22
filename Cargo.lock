@@ -218,9 +218,12 @@ dependencies = [
  "zeroize",
  "zkboo",
  "zkboo-bip32",
+ "zkboo-circuit-hash",
  "zkboo-ecc",
+ "zkboo-hmac",
  "zkboo-modular",
  "zkboo-profiling",
+ "zkboo-sha2",
 ]
 
 [[package]]
@@ -382,7 +385,7 @@ dependencies = [
 
 [[package]]
 name = "zkboo-bip32"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "zkboo",
  "zkboo-ecc",
