@@ -23,7 +23,8 @@ use proofofseed_circuits::{
     bip39_seed_circuit, ethereum_address_circuit, ethereum_address_verify_circuit,
     hardened_child_circuit, hardened_child_verify_circuit, master_key_circuit, normal_child_circuit,
     normal_child_verify_circuit, public_key_circuit, public_key_verify_circuit,
-    slip10_child_circuit, slip10_child_verify_circuit, slip10_master_circuit,
+    bip39_seed_verify_circuit, master_key_verify_circuit, slip10_child_circuit,
+    slip10_child_verify_circuit, slip10_master_circuit, slip10_master_verify_circuit,
 };
 use zkboo::circuit::Circuit;
 use zkboo::crypto::{GeneratesRandom, HashPRG, Hasher, Keccak256Hasher, PseudoRandomGenerator};
@@ -280,6 +281,37 @@ pub fn verify(
     index: Option<u32>,
     family: u8,
 ) -> bool {
+    verify_with_shape(
+        statement, output, stream, num_iters, binding, rounds, chain_code, index, family, None,
+        None,
+    )
+}
+
+/// [verify], told the witness *shape* of the seed statements.
+///
+/// The master-key and BIP-39 statements allocate one circuit input per witness byte, so
+/// their witness length is a public parameter: a proof over a 64-byte BIP-39 seed and one
+/// over the 16-byte BIP-32 test vector are different circuits. A verifier given neither
+/// falls back to the canonical test vector, which is what a stock device proves, and
+/// which is why [verify] was able to look correct while rejecting every real seed proof.
+///
+/// `salt` is the BIP-39 PBKDF2 salt, `"mnemonic" ‖ passphrase`. It is a public parameter
+/// of that statement — the circuit allocates it as constants — so **a BIP-39 proof made
+/// under a passphrase discloses that passphrase to its verifier.**
+#[allow(clippy::too_many_arguments)]
+pub fn verify_with_shape(
+    statement: u8,
+    output: &[u8],
+    stream: &[u8],
+    num_iters: usize,
+    binding: &[u8],
+    rounds: usize,
+    chain_code: Option<&[u8]>,
+    index: Option<u32>,
+    family: u8,
+    witness_len: Option<usize>,
+    salt: Option<&[u8]>,
+) -> bool {
     let expected = match deserialize_words(output) {
         Some(w) => w,
         None => return false,
@@ -289,17 +321,29 @@ pub fn verify(
         None => return false,
     };
     match (family, statement) {
-        // Parked statements (witness unreachable on a stock device): test-vector only.
+        // The seed statements. Their witness *shape* is public — one input word per
+        // byte — so the verifier must be told it, or it rebuilds a structurally
+        // different circuit and rejects every real proof. `witness_len` absent means
+        // the canonical test vector, which is what a stock device proves (its real
+        // seed is unreachable through BOLOS).
         (Family::Bip32Secp256k1, MASTER_KEY) => {
-            verify_stream(&master_key_circuit(), &expected, stream, num_iters, binding)
+            let circuit = match witness_len {
+                Some(n) => master_key_verify_circuit(n),
+                None => master_key_circuit(),
+            };
+            verify_stream(&circuit, &expected, stream, num_iters, binding)
         }
-        (Family::Bip32Secp256k1, BIP39_SEED) => verify_stream(
-            &bip39_seed_circuit(rounds),
-            &expected,
-            stream,
-            num_iters,
-            binding,
-        ),
+        (Family::Bip32Secp256k1, BIP39_SEED) => {
+            let circuit = match (witness_len, salt) {
+                (Some(n), Some(s)) => bip39_seed_verify_circuit(n, s.to_vec(), rounds),
+                (None, None) => bip39_seed_circuit(rounds),
+                // A length without its salt (or the reverse) cannot name a circuit:
+                // both are public parameters of this statement and neither has a
+                // default that is safe to assume.
+                _ => return false,
+            };
+            verify_stream(&circuit, &expected, stream, num_iters, binding)
+        }
         // Child statements: verifier-asserted chain code + index, placeholder witness.
         (Family::Bip32Secp256k1, HARDENED_CHILD) => {
             let circuit = match (chain_code, index) {
@@ -334,7 +378,11 @@ pub fn verify(
         // non-hardened asserted index panics in the circuit and is caught by
         // [verify_stream] as a failed verification.
         (Family::Slip10Ed25519, MASTER_KEY) => {
-            verify_stream(&slip10_master_circuit(), &expected, stream, num_iters, binding)
+            let circuit = match witness_len {
+                Some(n) => slip10_master_verify_circuit(n),
+                None => slip10_master_circuit(),
+            };
+            verify_stream(&circuit, &expected, stream, num_iters, binding)
         }
         (Family::Slip10Ed25519, HARDENED_CHILD) => {
             let circuit = match (chain_code, index) {
@@ -345,6 +393,30 @@ pub fn verify(
         }
         _ => false,
     }
+}
+
+/// The structural fingerprint of the circuit a prover runs for `(family, statement)`,
+/// computed with natively recomputed comb tables.
+///
+/// Exposed so a host can compare its own answer with one read back from a device, which
+/// is what establishes that the device compiled the circuit the host thinks it did. See
+/// [proofofseed_circuits::statement_fingerprint] for why the digest is a function of the
+/// public parameters and not of the witness.
+pub fn statement_fingerprint(
+    statement: u8,
+    rounds: usize,
+    family: u8,
+    chain_code: Option<&[u8]>,
+    index: Option<u32>,
+) -> Option<[u8; 32]> {
+    let family = match family {
+        0 => proofofseed_circuits::request::Family::Bip32Secp256k1,
+        1 => proofofseed_circuits::request::Family::Slip10Ed25519,
+        _ => return None,
+    };
+    proofofseed_circuits::statement_fingerprint::<proofofseed_circuits::comb::ComputedComb>(
+        family, statement, rounds, chain_code, index,
+    )
 }
 
 /// The number of ZKBoo responses (repetitions) needed for `bits` bits of soundness.
