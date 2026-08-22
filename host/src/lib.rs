@@ -395,6 +395,37 @@ pub fn verify_with_shape(
     }
 }
 
+/// The public output of a seed statement proved against `witness`.
+///
+/// The master-key and BIP-39 statements normally run on a compiled-in test vector,
+/// because a stock secure element cannot reach its own master seed or mnemonic. A prover
+/// handed a witness directly — a software wallet, or a device exercising the statement
+/// with a mock one — produces a different output, and a verifier needs it. `salt` is the
+/// BIP-39 PBKDF2 salt and must be empty for the master-key statement.
+pub fn seed_statement_output(
+    statement: u8,
+    family: u8,
+    witness: &[u8],
+    salt: &[u8],
+    rounds: usize,
+) -> Option<Vec<u8>> {
+    use proofofseed_circuits::{MasterKeyCircuit, SeedCircuit, Slip10MasterCircuit};
+    match (family, statement) {
+        (0, MASTER_KEY) if salt.is_empty() => {
+            Some(harness::output_of(&MasterKeyCircuit { seed: witness.to_vec() }))
+        }
+        (1, MASTER_KEY) if salt.is_empty() => {
+            Some(harness::output_of(&Slip10MasterCircuit { seed: witness.to_vec() }))
+        }
+        (0, BIP39_SEED) if !salt.is_empty() => Some(harness::output_of(&SeedCircuit {
+            mnemonic: witness.to_vec(),
+            salt: salt.to_vec(),
+            rounds,
+        })),
+        _ => None,
+    }
+}
+
 /// The structural fingerprint of the circuit a prover runs for `(family, statement)`,
 /// computed with natively recomputed comb tables.
 ///

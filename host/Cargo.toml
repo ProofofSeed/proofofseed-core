@@ -23,6 +23,10 @@ zkboo-profiling = { version = "1.0.0" }
 getrandom = "0.2"
 
 [dev-dependencies]
+# The examples measure the *device's* configuration, which reads its comb tables from
+# the precomputed table rather than recomputing them — a different heap profile, and the
+# one the SRAM budget has to accommodate.
+proofofseed-circuits = { path = "../circuits", features = ["flash-comb"] }
 # For the proof-of-seed diagnostic examples (gate counts, refcounts, prover memory)
 # and the fixed-base comb table generator.
 zkboo-ecc = { version = "1.0.0" }
