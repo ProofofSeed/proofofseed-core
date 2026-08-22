@@ -347,6 +347,30 @@ pub fn verify(
     }
 }
 
+/// The structural fingerprint of the circuit a prover runs for `(family, statement)`,
+/// computed with natively recomputed comb tables.
+///
+/// Exposed so a host can compare its own answer with one read back from a device, which
+/// is what establishes that the device compiled the circuit the host thinks it did. See
+/// [proofofseed_circuits::statement_fingerprint] for why the digest is a function of the
+/// public parameters and not of the witness.
+pub fn statement_fingerprint(
+    statement: u8,
+    rounds: usize,
+    family: u8,
+    chain_code: Option<&[u8]>,
+    index: Option<u32>,
+) -> Option<[u8; 32]> {
+    let family = match family {
+        0 => proofofseed_circuits::request::Family::Bip32Secp256k1,
+        1 => proofofseed_circuits::request::Family::Slip10Ed25519,
+        _ => return None,
+    };
+    proofofseed_circuits::statement_fingerprint::<proofofseed_circuits::comb::ComputedComb>(
+        family, statement, rounds, chain_code, index,
+    )
+}
+
 /// The number of ZKBoo responses (repetitions) needed for `bits` bits of soundness.
 ///
 /// A cheating prover survives one repetition with probability 2/3: of the three view

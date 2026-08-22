@@ -435,6 +435,63 @@ pub fn ethereum_address_verify_circuit() -> AddressCircuit {
     AddressCircuit::new(placeholder_priv())
 }
 
+/// The structural fingerprint of the circuit a prover would run for
+/// `(family, statement)`, or `None` for a pair no prover implements.
+///
+/// This is the same digest the ranged prover binds its entropy to, computed here from
+/// the *public* parameters alone. It is well defined without the witness because the
+/// fingerprinting backend ingests an input's **type** and not its value, while an
+/// allocated constant contributes its value — so the chain code, index and round count
+/// move the digest and the secret never does. That is what makes it safe to ask a
+/// device for: the answer carries no information about the seed.
+///
+/// The point of asking is to check that the circuit a device actually compiled is the
+/// circuit the host thinks it is. Byte-equality of a ranged proof already implies that
+/// for whatever statement was proved, but only for that statement, and only at the cost
+/// of proving it.
+///
+/// ⚠️ Cost is linear in the gate count, so for the elliptic-curve statements this is a
+/// full pass over an elephant. On a secure element that runs for hours *without
+/// yielding*, which the watchdog will not tolerate; callers on constrained hardware
+/// must refuse [is_elephant] statements rather than attempt them.
+pub fn statement_fingerprint<T: CombTableSource>(
+    family: request::Family,
+    statement: u8,
+    rounds: usize,
+    chain_code: Option<&[u8]>,
+    index: Option<u32>,
+) -> Option<[u8; 32]> {
+    use request::Family::{Bip32Secp256k1 as B32, Slip10Ed25519 as S10};
+    fn fp<C: Circuit>(c: &C) -> Option<[u8; 32]> {
+        Some(zkboo_circuit_hash::hash_circuit::<C, zkboo::crypto::Keccak256Hasher>(c))
+    }
+    // The child statements are request-anchored: their public parameters come from
+    // the request, and the canonical test-vector parameters stand in when it omits
+    // them, exactly as the prover dispatch does.
+    let cc = |d: &str| chain_code.map(<[u8]>::to_vec).unwrap_or_else(|| from_hex(d));
+    match (family, statement) {
+        (B32, MASTER_KEY) => fp(&master_key_circuit()),
+        (B32, HARDENED_CHILD) => fp(&hardened_child_verify_circuit(
+            cc(MASTER_CC_HEX),
+            index.unwrap_or(HARDENED_OFFSET),
+        )),
+        (B32, BIP39_SEED) => fp(&bip39_seed_circuit(rounds)),
+        (B32, PUBLIC_KEY) => fp(&PubKeyCircuit::<T>::new(placeholder_priv())),
+        (B32, NORMAL_CHILD) => fp(&NormalChildCircuit::<T>::new(
+            cc(M0H_CC_HEX),
+            placeholder_priv(),
+            index.unwrap_or(1),
+        )),
+        (B32, ETH_ADDRESS) => fp(&AddressCircuit::<T>::new(placeholder_priv())),
+        (S10, MASTER_KEY) => fp(&slip10_master_circuit()),
+        (S10, HARDENED_CHILD) => fp(&slip10_child_verify_circuit(
+            cc(SLIP10_MASTER_CC_HEX),
+            index.unwrap_or(HARDENED_OFFSET),
+        )),
+        _ => None,
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Expected public outputs (for off-device validation), big-endian hex.
 // ---------------------------------------------------------------------------
