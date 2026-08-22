@@ -219,8 +219,10 @@ dependencies = [
  "zkboo",
  "zkboo-bip32",
  "zkboo-ecc",
+ "zkboo-hmac",
  "zkboo-modular",
  "zkboo-profiling",
+ "zkboo-sha2",
 ]
 
 [[package]]
