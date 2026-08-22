@@ -11,7 +11,7 @@ zkboo = { version = "1.0.0", default-features = false, features = [
     "u64",
     "keccak",
 ] }
-zkboo-bip32 = { version = "1.0.0" }
+zkboo-bip32 = { version = "1.1.0" }
 # Path within this workspace; the version applies on publication.
 proofofseed-circuits = { version = "0.1.0", path = "../circuits" }
 # Zeroizing wrappers on all derived key material.
