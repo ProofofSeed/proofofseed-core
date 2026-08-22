@@ -218,6 +218,7 @@ dependencies = [
  "zeroize",
  "zkboo",
  "zkboo-bip32",
+ "zkboo-circuit-hash",
  "zkboo-ecc",
  "zkboo-hmac",
  "zkboo-modular",

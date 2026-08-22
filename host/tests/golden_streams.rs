@@ -97,9 +97,17 @@ fn extracted_crates_reproduce_the_pre_extraction_streams() {
             })
             .collect();
     assert_eq!(fixture.len(), streams.len(), "fixture row count");
+    // Every row is checked before anything is reported. A fixture that stops at the first
+    // mismatch cannot answer the question one actually asks when it goes red — *which*
+    // rows moved — and a change meant to touch one group is only shown to have done that
+    // if the other group is seen not to move.
+    let mut moved = Vec::new();
     for (name, stream) in streams {
         let (len, digest) = fixture[name];
-        assert_eq!(stream.len(), len, "{name}: byte length moved");
-        assert_eq!(keccak_hex(&stream), digest, "{name}: proof bytes moved");
+        let got = keccak_hex(&stream);
+        if stream.len() != len || got != digest {
+            moved.push(format!("  {name}: {len} B {digest}  ->  {} B {got}", stream.len()));
+        }
     }
+    assert!(moved.is_empty(), "proof bytes moved in {} row(s):\n{}", moved.len(), moved.join("\n"));
 }

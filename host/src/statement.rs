@@ -205,13 +205,14 @@ pub struct Resolved {
     pub request: ProofRequest,
     pub digest: Option<Zeroizing<[u8; 32]>>,
     /// The witness *shape* of the seed statements: the witness byte length, and the
-    /// BIP-39 PBKDF2 salt where there is one. `None` for statements whose circuit shape
-    /// is fixed by their public parameters instead.
+    /// BIP-39 salt's byte length where there is one. `None` for statements whose circuit
+    /// shape is fixed by their public parameters instead.
     ///
     /// A verifier needs this to rebuild the circuit, because these statements allocate
-    /// one input per witness byte. It is not secret — a length and, for BIP-39, the salt
-    /// `"mnemonic" ‖ passphrase`, which means **publishing it discloses the passphrase.**
-    pub witness_shape: Option<(usize, Option<Vec<u8>>)>,
+    /// one input per witness byte. It is two lengths and nothing else — the salt's bytes
+    /// are witness, so a BIP-39 passphrase never leaves the prover; only how long it is
+    /// (`salt_len - 8`) can be inferred.
+    pub witness_shape: Option<(usize, Option<usize>)>,
 }
 
 /// Inputs to [resolve]. The mnemonic and passphrase are borrowed and never
@@ -356,9 +357,7 @@ pub fn resolve(p: ResolveParams<'_>) -> Result<Resolved, String> {
     // from public parameters the verifier already asserts.
     let witness_shape = match &material_owner {
         MaterialOwner::Seed { seed } => Some((seed.len(), None)),
-        MaterialOwner::Mnemonic { mnemonic, salt } => {
-            Some((mnemonic.len(), Some(salt.to_vec())))
-        }
+        MaterialOwner::Mnemonic { mnemonic, salt } => Some((mnemonic.len(), Some(salt.len()))),
         _ => None,
     };
     Ok(Resolved { circuit, request, digest, witness_shape })

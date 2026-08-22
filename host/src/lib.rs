@@ -295,9 +295,9 @@ pub fn verify(
 /// falls back to the canonical test vector, which is what a stock device proves, and
 /// which is why [verify] was able to look correct while rejecting every real seed proof.
 ///
-/// `salt` is the BIP-39 PBKDF2 salt, `"mnemonic" ‖ passphrase`. It is a public parameter
-/// of that statement — the circuit allocates it as constants — so **a BIP-39 proof made
-/// under a passphrase discloses that passphrase to its verifier.**
+/// `salt_len` is the length of the BIP-39 PBKDF2 salt, `"mnemonic" ‖ passphrase`. The salt
+/// itself is witness, so a verifier needs only its length — it never learns the
+/// passphrase, only how long it is.
 #[allow(clippy::too_many_arguments)]
 pub fn verify_with_shape(
     statement: u8,
@@ -310,7 +310,7 @@ pub fn verify_with_shape(
     index: Option<u32>,
     family: u8,
     witness_len: Option<usize>,
-    salt: Option<&[u8]>,
+    salt_len: Option<usize>,
 ) -> bool {
     let expected = match deserialize_words(output) {
         Some(w) => w,
@@ -334,12 +334,11 @@ pub fn verify_with_shape(
             verify_stream(&circuit, &expected, stream, num_iters, binding)
         }
         (Family::Bip32Secp256k1, BIP39_SEED) => {
-            let circuit = match (witness_len, salt) {
-                (Some(n), Some(s)) => bip39_seed_verify_circuit(n, s.to_vec(), rounds),
+            let circuit = match (witness_len, salt_len) {
+                (Some(m), Some(sl)) => bip39_seed_verify_circuit(m, sl, rounds),
                 (None, None) => bip39_seed_circuit(rounds),
-                // A length without its salt (or the reverse) cannot name a circuit:
-                // both are public parameters of this statement and neither has a
-                // default that is safe to assume.
+                // One length without the other cannot name a circuit: both are public
+                // shape parameters and neither has a default that is safe to assume.
                 _ => return false,
             };
             verify_stream(&circuit, &expected, stream, num_iters, binding)
