@@ -66,7 +66,7 @@
 use crate::request::ProofRequest;
 use alloc::vec::Vec;
 use zeroize::{Zeroize, Zeroizing};
-use zkboo::backend::BackendHook;
+use zkboo::backend::{Backend, BackendHook, Hooked, NoHook};
 use zkboo::circuit::Circuit;
 use zkboo::crypto::{
     Hasher, Keccak256Hasher, PseudoRandomGenerator, Seed,
@@ -74,7 +74,7 @@ use zkboo::crypto::{
 use zkboo::prover::proof::ProofBuilder;
 use zkboo::prover::proof::collectors::ResponseDataCollector;
 use zkboo::prover::views::WordTriplePool;
-use zkboo_circuit_hash::hash_circuit;
+use zkboo_circuit_hash::CircuitHashingBackend;
 
 /// Version of *this module's* entropy transcript — the field layout that
 /// [request_transcript_digest] absorbs. Bump on any change to what the transcript
@@ -225,7 +225,30 @@ pub fn deterministic_seed_entropy<C: Circuit>(
     circuit: &C,
     request_digest: &Zeroizing<[u8; 32]>,
 ) -> Zeroizing<[u8; 32]> {
-    let fingerprint: [u8; 32] = hash_circuit::<C, Keccak256Hasher>(circuit);
+    return deterministic_seed_entropy_hooked::<C, NoHook>(circuit, request_digest, ());
+}
+
+/// [deterministic_seed_entropy] with a [BackendHook] wrapping the fingerprinting pass.
+///
+/// The pass is a full execution of the circuit through a hashing backend, and it is
+/// *silent*: it emits no proof bytes and, unhooked, hands control back to nobody until
+/// it finishes. On a secure element that is not merely slow, it is fatal — the OS
+/// watchdog reboots the device out from under a command that stops answering, and this
+/// pass runs before the prover has emitted its first byte. Its cost is linear in the
+/// gate count, so the round count of a PBKDF2 circuit scales it without bound while
+/// leaving its memory flat: a BIP-39 circuit at 2048 rounds fingerprints in 553x the
+/// time of one at 2 rounds and 221x that of a single-HMAC circuit, on the same heap.
+///
+/// A caller that can yield must therefore hook this pass rather than the prover alone.
+/// The hook is transcript-neutral — it observes backend operations and never touches
+/// the hasher — so the digest, and hence the derived entropy, is identical to the
+/// unhooked path; `tests/hooked_fingerprint.rs` pins that and that the hook fires.
+pub fn deterministic_seed_entropy_hooked<C: Circuit, BH: BackendHook>(
+    circuit: &C,
+    request_digest: &Zeroizing<[u8; 32]>,
+    hook_init_arg: BH::InitArg,
+) -> Zeroizing<[u8; 32]> {
+    let fingerprint: [u8; 32] = circuit_fingerprint_hooked::<C, BH>(circuit, hook_init_arg);
     let mut h = Keccak256Hasher::new();
     absorb_bytes(&mut h, b"ProofofSeed/ranged-prover-entropy/seed/v1");
     h.update(&fingerprint);
@@ -234,6 +257,20 @@ pub fn deterministic_seed_entropy<C: Circuit>(
     h.finalize_into(&mut *out);
     h.zeroize();
     out
+}
+
+/// The structural fingerprint of `circuit`, computed with a [BackendHook] wrapping the
+/// hashing backend so a constrained caller can service its watchdog through the pass.
+///
+/// Identical in output to `zkboo_circuit_hash::hash_circuit` — the hook only observes.
+pub fn circuit_fingerprint_hooked<C: Circuit, BH: BackendHook>(
+    circuit: &C,
+    hook_init_arg: BH::InitArg,
+) -> [u8; 32] {
+    let backend = Hooked::new(BH::new(hook_init_arg), CircuitHashingBackend::<Keccak256Hasher>::new());
+    let mut frontend = backend.into_frontend();
+    circuit.exec(&mut frontend);
+    return frontend.finalize();
 }
 
 /// Builds the responses `[start, end)` of the `num_iters`-response proof determined

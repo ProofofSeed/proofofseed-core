@@ -513,10 +513,10 @@ pub fn ethereum_address_verify_circuit() -> AddressCircuit {
 /// for whatever statement was proved, but only for that statement, and only at the cost
 /// of proving it.
 ///
-/// ⚠️ Cost is linear in the gate count, so for the elliptic-curve statements this is a
-/// full pass over an elephant. On a secure element that runs for hours *without
-/// yielding*, which the watchdog will not tolerate; callers on constrained hardware
-/// must refuse [is_elephant] statements rather than attempt them.
+/// ⚠️ Cost is linear in the gate count, and the pass yields to nobody: it hands control
+/// back only when it finishes. That is a hard constraint on a device with a watchdog,
+/// not merely a slow operation — a caller there must use [statement_fingerprint_hooked]
+/// and service the watchdog from the hook.
 pub fn statement_fingerprint<T: CombTableSource>(
     family: request::Family,
     statement: u8,
@@ -524,30 +524,56 @@ pub fn statement_fingerprint<T: CombTableSource>(
     chain_code: Option<&[u8]>,
     index: Option<u32>,
 ) -> Option<[u8; 32]> {
+    return statement_fingerprint_hooked::<T, zkboo::backend::NoHook>(
+        family, statement, rounds, chain_code, index, (),
+    );
+}
+
+/// [statement_fingerprint] with a [zkboo::backend::BackendHook] wrapping the pass, so a
+/// caller on constrained hardware can keep answering its OS while the pass runs.
+///
+/// The hook only observes backend operations, so the digest is identical to the unhooked
+/// one — `tests/hooked_fingerprint.rs` pins that, and pins that the hook fires at all.
+///
+/// The scale this matters at: BIP-39 is one HMAC chain per PBKDF2 round, so `rounds`
+/// multiplies the pass without bound while its memory stays flat — at 2048 rounds it is
+/// 553x the pass at 2 rounds and 221x a single-HMAC circuit, on a *smaller* heap than
+/// that circuit needs. Unhooked, that is a device reboot rather than a slow answer.
+pub fn statement_fingerprint_hooked<T: CombTableSource, BH: zkboo::backend::BackendHook>(
+    family: request::Family,
+    statement: u8,
+    rounds: usize,
+    chain_code: Option<&[u8]>,
+    index: Option<u32>,
+    hook_init_arg: BH::InitArg,
+) -> Option<[u8; 32]> {
     use request::Family::{Bip32Secp256k1 as B32, Slip10Ed25519 as S10};
-    fn fp<C: Circuit>(c: &C) -> Option<[u8; 32]> {
-        Some(zkboo_circuit_hash::hash_circuit::<C, zkboo::crypto::Keccak256Hasher>(c))
+    fn fp<BH: zkboo::backend::BackendHook, C: Circuit>(
+        arg: BH::InitArg,
+        c: &C,
+    ) -> Option<[u8; 32]> {
+        Some(ranged::circuit_fingerprint_hooked::<C, BH>(c, arg))
     }
     // The child statements are request-anchored: their public parameters come from
     // the request, and the canonical test-vector parameters stand in when it omits
     // them, exactly as the prover dispatch does.
     let cc = |d: &str| chain_code.map(<[u8]>::to_vec).unwrap_or_else(|| from_hex(d));
     match (family, statement) {
-        (B32, MASTER_KEY) => fp(&master_key_circuit()),
-        (B32, HARDENED_CHILD) => fp(&hardened_child_verify_circuit(
+        (B32, MASTER_KEY) => fp::<BH, _>(hook_init_arg, &master_key_circuit()),
+        (B32, HARDENED_CHILD) => fp::<BH, _>(hook_init_arg, &hardened_child_verify_circuit(
             cc(MASTER_CC_HEX),
             index.unwrap_or(HARDENED_OFFSET),
         )),
-        (B32, BIP39_SEED) => fp(&bip39_seed_circuit(rounds)),
-        (B32, PUBLIC_KEY) => fp(&PubKeyCircuit::<T>::new(placeholder_priv())),
-        (B32, NORMAL_CHILD) => fp(&NormalChildCircuit::<T>::new(
+        (B32, BIP39_SEED) => fp::<BH, _>(hook_init_arg, &bip39_seed_circuit(rounds)),
+        (B32, PUBLIC_KEY) => fp::<BH, _>(hook_init_arg, &PubKeyCircuit::<T>::new(placeholder_priv())),
+        (B32, NORMAL_CHILD) => fp::<BH, _>(hook_init_arg, &NormalChildCircuit::<T>::new(
             cc(M0H_CC_HEX),
             placeholder_priv(),
             index.unwrap_or(1),
         )),
-        (B32, ETH_ADDRESS) => fp(&AddressCircuit::<T>::new(placeholder_priv())),
-        (S10, MASTER_KEY) => fp(&slip10_master_circuit()),
-        (S10, HARDENED_CHILD) => fp(&slip10_child_verify_circuit(
+        (B32, ETH_ADDRESS) => fp::<BH, _>(hook_init_arg, &AddressCircuit::<T>::new(placeholder_priv())),
+        (S10, MASTER_KEY) => fp::<BH, _>(hook_init_arg, &slip10_master_circuit()),
+        (S10, HARDENED_CHILD) => fp::<BH, _>(hook_init_arg, &slip10_child_verify_circuit(
             cc(SLIP10_MASTER_CC_HEX),
             index.unwrap_or(HARDENED_OFFSET),
         )),
