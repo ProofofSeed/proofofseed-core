@@ -406,6 +406,50 @@ fn placeholder_priv() -> Vec<u8> {
     alloc::vec![0u8; PRIV_KEY_BYTES]
 }
 
+/// Master-key verifier circuit for a witness of `seed_len` bytes.
+///
+/// The seed *length* is a public parameter of this statement: the circuit allocates one
+/// input word per byte, so a proof over a 64-byte BIP-39 seed and one over the 16-byte
+/// BIP-32 test vector are structurally different circuits. A verifier that assumes the
+/// test-vector length rejects every real proof, which is what it used to do.
+pub fn master_key_verify_circuit(seed_len: usize) -> MasterKeyCircuit {
+    MasterKeyCircuit { seed: alloc::vec![0u8; seed_len] }
+}
+
+/// SLIP-10 master-key verifier circuit for a witness of `seed_len` bytes.
+pub fn slip10_master_verify_circuit(seed_len: usize) -> Slip10MasterCircuit {
+    Slip10MasterCircuit { seed: alloc::vec![0u8; seed_len] }
+}
+
+/// BIP-39 seed verifier circuit for a mnemonic of `mnemonic_len` bytes under `salt`.
+///
+/// ⚠️ **The salt is a public parameter, and the salt is `"mnemonic" ‖ passphrase`.** The
+/// circuit allocates it as constants, so a verifier must know it to rebuild the circuit,
+/// and proving this statement under a BIP-39 passphrase therefore discloses that
+/// passphrase. The mnemonic's *length* is public for the same reason the seed's is. Only
+/// the mnemonic bytes are witness.
+pub fn bip39_seed_verify_circuit(
+    mnemonic_len: usize,
+    salt: Vec<u8>,
+    rounds: usize,
+) -> SeedCircuit {
+    SeedCircuit { mnemonic: alloc::vec![0u8; mnemonic_len], salt, rounds }
+}
+
+/// The BIP-39 PBKDF2 salt for `passphrase`: the constant `"mnemonic"` followed by the
+/// passphrase, empty for the default case.
+///
+/// Note that the canonical test vector's salt is *not* the default one — it carries the
+/// passphrase `"TREZOR"`, so `bip39_salt_for(b"")` and the salt baked into
+/// [bip39_seed_circuit] differ, and a verifier that reached for the wrong one would
+/// rebuild the wrong circuit.
+pub fn bip39_salt_for(passphrase: &[u8]) -> Vec<u8> {
+    let mut salt = alloc::vec![b'm', b'n', b'e', b'm', b'o', b'n', b'i', b'c'];
+    salt[..8].copy_from_slice(b"mnemonic");
+    salt.extend_from_slice(passphrase);
+    salt
+}
+
 /// Hardened-child verifier circuit: the verifier-asserted chain code and index,
 /// with a placeholder parent private key.
 pub fn hardened_child_verify_circuit(chain_code: Vec<u8>, index: u32) -> HardenedChildCircuit {
