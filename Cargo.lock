@@ -199,11 +199,13 @@ dependencies = [
 name = "proofofseed-circuits"
 version = "0.1.0"
 dependencies = [
+ "proofofseed-circuits",
  "zeroize",
  "zkboo",
  "zkboo-bip32",
  "zkboo-circuit-hash",
  "zkboo-ecc",
+ "zkboo-modular",
 ]
 
 [[package]]
