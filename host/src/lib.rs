@@ -647,7 +647,8 @@ pub mod harness {
 pub mod derive {
     use super::harness::exec_words;
     use proofofseed_circuits::{
-        HardenedChildCircuit, MasterKeyCircuit, NormalChildCircuit, SeedCircuit,
+        comb::ComputedComb, HardenedChildCircuit, MasterKeyCircuit, NormalChildCircuit,
+        SeedCircuit,
         Slip10ChildCircuit, Slip10MasterCircuit,
     };
     use zeroize::{Zeroize, Zeroizing};
@@ -709,11 +710,11 @@ pub mod derive {
                     index,
                 })
             } else {
-                exec_words(&NormalChildCircuit {
-                    chain_code: node.chain_code.to_vec(),
-                    parent_priv: node.private_key.to_vec(),
+                exec_words(&NormalChildCircuit::<ComputedComb>::new(
+                    node.chain_code.to_vec(),
+                    node.private_key.to_vec(),
                     index,
-                })
+                ))
             };
             node = bip32_node_of(words);
         }

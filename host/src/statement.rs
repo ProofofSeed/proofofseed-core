@@ -302,11 +302,11 @@ pub fn resolve(p: ResolveParams<'_>) -> Result<Resolved, String> {
                         parent_priv: node.private_key.to_vec(),
                         index,
                     }),
-                    (B32, false) => AnyCircuit::NormalChild(NormalChildCircuit {
-                        chain_code: node.chain_code.to_vec(),
-                        parent_priv: node.private_key.to_vec(),
+                    (B32, false) => AnyCircuit::NormalChild(NormalChildCircuit::new(
+                        node.chain_code.to_vec(),
+                        node.private_key.to_vec(),
                         index,
-                    }),
+                    )),
                     (S10, true) => AnyCircuit::Slip10Child(Slip10ChildCircuit {
                         chain_code: node.chain_code.to_vec(),
                         parent_priv: node.private_key.to_vec(),
@@ -328,9 +328,9 @@ pub fn resolve(p: ResolveParams<'_>) -> Result<Resolved, String> {
                 let full_path = p.path.clone().ok_or("path (the full key path) is required")?;
                 let node = derive::bip32_node(&seed, &full_path);
                 let circuit = if statement == Statement::PublicKey {
-                    AnyCircuit::PubKey(PubKeyCircuit { private_key: node.private_key.to_vec() })
+                    AnyCircuit::PubKey(PubKeyCircuit::new(node.private_key.to_vec()))
                 } else {
-                    AnyCircuit::Address(AddressCircuit { private_key: node.private_key.to_vec() })
+                    AnyCircuit::Address(AddressCircuit::new(node.private_key.to_vec()))
                 };
                 (
                     circuit,

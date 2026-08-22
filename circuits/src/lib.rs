@@ -12,18 +12,23 @@
 #![no_std]
 extern crate alloc;
 
+pub mod comb;
 pub mod ranged;
 pub mod request;
 
 use alloc::vec::Vec;
+use core::marker::PhantomData;
 
 use zeroize::Zeroize;
+
+use comb::{CombTableSource, ComputedComb};
 use zkboo::backend::{Backend, Frontend};
 use zkboo::circuit::Circuit;
 use zkboo::word::Words;
 use zkboo_bip32::{
-    be_bytes_to_word, bip39_seed, ethereum_address, hardened_child_key, master_key,
-    normal_child_key, public_key, slip10_ed25519_child, slip10_ed25519_master, HARDENED_OFFSET,
+    be_bytes_to_word, bip39_seed, ethereum_address_with_tables, hardened_child_key, master_key,
+    normal_child_key_with_tables, public_key_with_tables, slip10_ed25519_child,
+    slip10_ed25519_master, HARDENED_OFFSET,
 };
 use zkboo_ecc::montgomery::PointFrontendIO;
 
@@ -108,6 +113,15 @@ macro_rules! zeroize_on_drop {
             }
         }
     };
+    // The elliptic-curve circuits carry a comb-table source parameter; they still
+    // zeroize exactly the same fields.
+    (<$g:ident> $circuit:ident: $($secret:ident),+) => {
+        impl<$g: $crate::comb::CombTableSource> Drop for $circuit<$g> {
+            fn drop(&mut self) {
+                $(self.$secret.zeroize();)+
+            }
+        }
+    };
 }
 
 /// BIP-32 master private key and chain code from a seed. Output: 64 u8 (IL ‖ IR).
@@ -153,14 +167,23 @@ impl Circuit for HardenedChildCircuit {
 }
 
 /// BIP-32 normal (non-hardened) child key (needs secp256k1). Output as hardened.
-pub struct NormalChildCircuit {
+///
+/// Generic over where the fixed-base comb reads its window tables; see [comb].
+pub struct NormalChildCircuit<T: CombTableSource = ComputedComb> {
     pub chain_code: Vec<u8>,
     pub parent_priv: Vec<u8>,
     pub index: u32,
+    tables: PhantomData<T>,
 }
-zeroize_on_drop!(NormalChildCircuit: parent_priv);
+zeroize_on_drop!(<T> NormalChildCircuit: parent_priv);
 
-impl Circuit for NormalChildCircuit {
+impl<T: CombTableSource> NormalChildCircuit<T> {
+    pub fn new(chain_code: Vec<u8>, parent_priv: Vec<u8>, index: u32) -> Self {
+        Self { chain_code, parent_priv, index, tables: PhantomData }
+    }
+}
+
+impl<T: CombTableSource> Circuit for NormalChildCircuit<T> {
     fn exec<B: Backend>(&self, frontend: &Frontend<B>) {
         let chain_code = self
             .chain_code
@@ -172,8 +195,14 @@ impl Circuit for NormalChildCircuit {
             .iter()
             .map(|&b| frontend.input(b))
             .collect::<Vec<_>>();
-        let (child_priv, child_chain_code) =
-            normal_child_key(frontend, chain_code, parent_priv, self.index);
+        let mut tables = T::make();
+        let (child_priv, child_chain_code) = normal_child_key_with_tables(
+            frontend,
+            chain_code,
+            parent_priv,
+            self.index,
+            &mut tables,
+        );
         frontend.output(child_priv);
         child_chain_code.into_iter().for_each(|w| frontend.output(w));
     }
@@ -200,12 +229,21 @@ impl Circuit for SeedCircuit {
 }
 
 /// secp256k1 public key `d·G`. Output: 8 u64 (affine x ‖ y, 4 limbs each).
-pub struct PubKeyCircuit {
+///
+/// Generic over where the fixed-base comb reads its window tables; see [comb].
+pub struct PubKeyCircuit<T: CombTableSource = ComputedComb> {
     pub private_key: Vec<u8>,
+    tables: PhantomData<T>,
 }
-zeroize_on_drop!(PubKeyCircuit: private_key);
+zeroize_on_drop!(<T> PubKeyCircuit: private_key);
 
-impl Circuit for PubKeyCircuit {
+impl<T: CombTableSource> PubKeyCircuit<T> {
+    pub fn new(private_key: Vec<u8>) -> Self {
+        Self { private_key, tables: PhantomData }
+    }
+}
+
+impl<T: CombTableSource> Circuit for PubKeyCircuit<T> {
     fn exec<B: Backend>(&self, frontend: &Frontend<B>) {
         let bytes = self
             .private_key
@@ -213,7 +251,8 @@ impl Circuit for PubKeyCircuit {
             .map(|&b| frontend.input(b))
             .collect::<Vec<_>>();
         let scalar = be_bytes_to_word(&bytes);
-        let q = public_key(frontend, scalar);
+        let mut tables = T::make();
+        let q = public_key_with_tables(frontend, scalar, &mut tables);
         frontend.point_output_affine(q);
     }
 }
@@ -268,12 +307,21 @@ impl Circuit for Slip10ChildCircuit {
 }
 
 /// Ethereum address `Keccak256(d·G)[12:]`. Output: 20 u8.
-pub struct AddressCircuit {
+///
+/// Generic over where the fixed-base comb reads its window tables; see [comb].
+pub struct AddressCircuit<T: CombTableSource = ComputedComb> {
     pub private_key: Vec<u8>,
+    tables: PhantomData<T>,
 }
-zeroize_on_drop!(AddressCircuit: private_key);
+zeroize_on_drop!(<T> AddressCircuit: private_key);
 
-impl Circuit for AddressCircuit {
+impl<T: CombTableSource> AddressCircuit<T> {
+    pub fn new(private_key: Vec<u8>) -> Self {
+        Self { private_key, tables: PhantomData }
+    }
+}
+
+impl<T: CombTableSource> Circuit for AddressCircuit<T> {
     fn exec<B: Backend>(&self, frontend: &Frontend<B>) {
         let bytes = self
             .private_key
@@ -281,7 +329,8 @@ impl Circuit for AddressCircuit {
             .map(|&b| frontend.input(b))
             .collect::<Vec<_>>();
         let scalar = be_bytes_to_word(&bytes);
-        let address = ethereum_address(frontend, scalar);
+        let mut tables = T::make();
+        let address = ethereum_address_with_tables(frontend, scalar, &mut tables);
         address.into_iter().for_each(|w| frontend.output(w));
     }
 }
@@ -303,11 +352,7 @@ pub fn hardened_child_circuit() -> HardenedChildCircuit {
 }
 
 pub fn normal_child_circuit() -> NormalChildCircuit {
-    NormalChildCircuit {
-        chain_code: from_hex(M0H_CC_HEX),
-        parent_priv: from_hex(M0H_PRIV_HEX),
-        index: 1,
-    }
+    NormalChildCircuit::new(from_hex(M0H_CC_HEX), from_hex(M0H_PRIV_HEX), 1)
 }
 
 pub fn bip39_seed_circuit(rounds: usize) -> SeedCircuit {
@@ -331,11 +376,11 @@ pub fn slip10_child_circuit() -> Slip10ChildCircuit {
 }
 
 pub fn public_key_circuit() -> PubKeyCircuit {
-    PubKeyCircuit { private_key: private_key(1) }
+    PubKeyCircuit::new(private_key(1))
 }
 
 pub fn ethereum_address_circuit() -> AddressCircuit {
-    AddressCircuit { private_key: private_key(1) }
+    AddressCircuit::new(private_key(1))
 }
 
 // ---------------------------------------------------------------------------
@@ -369,7 +414,7 @@ pub fn hardened_child_verify_circuit(chain_code: Vec<u8>, index: u32) -> Hardene
 
 /// Normal (non-hardened) child verifier circuit.
 pub fn normal_child_verify_circuit(chain_code: Vec<u8>, index: u32) -> NormalChildCircuit {
-    NormalChildCircuit { chain_code, parent_priv: placeholder_priv(), index }
+    NormalChildCircuit::new(chain_code, placeholder_priv(), index)
 }
 
 /// SLIP-10 ed25519 child verifier circuit: the verifier-asserted chain code and
@@ -381,13 +426,13 @@ pub fn slip10_child_verify_circuit(chain_code: Vec<u8>, index: u32) -> Slip10Chi
 /// Public-key verifier circuit (no public params; the asserted statement is the
 /// output public key).
 pub fn public_key_verify_circuit() -> PubKeyCircuit {
-    PubKeyCircuit { private_key: placeholder_priv() }
+    PubKeyCircuit::new(placeholder_priv())
 }
 
 /// Ethereum-address verifier circuit (the asserted statement is the output
 /// address).
 pub fn ethereum_address_verify_circuit() -> AddressCircuit {
-    AddressCircuit { private_key: placeholder_priv() }
+    AddressCircuit::new(placeholder_priv())
 }
 
 // ---------------------------------------------------------------------------

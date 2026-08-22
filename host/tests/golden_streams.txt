@@ -1,10 +1,12 @@
 # Proof-byte-neutrality golden fixtures for the extraction from ledger-app.
-# Recorded from the ledger-app source tree, which is the source of truth for these
-# bytes, by `cargo run --release -p psverify --example golden_streams` in that tree;
-# each row is `name byte_length keccak256(stream)`. The extracted crates must
-# reproduce every stream byte-identically (tests/golden_streams.rs). Never regenerate
-# this file from this repository's own code — that would make the check circular and
-# assert nothing.
+# Recorded from the ledger-app source tree, which was the source of truth for these
+# bytes at the time; each row is `name byte_length keccak256(stream)`. The extracted
+# crates must reproduce every stream byte-identically (tests/golden_streams.rs).
+# Never regenerate this file from this repository's own code — that would make the
+# check circular and assert nothing. Since 2026-08-22 ledger-app consumes these
+# crates rather than carrying its own copies, so there is no longer a second
+# implementation to record from: the fixture is now a historical anchor to the bytes
+# ledger-app@86a4656 produced, and re-recording means checking that commit out.
 #
 # First recorded at ledger-app 86a4656 (the extraction acceptance). Re-recorded
 # 2026-08-21 at ledger-app 130cb2e, where the deterministic-entropy transcript began
