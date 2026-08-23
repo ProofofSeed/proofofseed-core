@@ -25,7 +25,7 @@ use std::ptr::NonNull;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use linked_list_allocator::Heap;
-use proofofseed_circuits::{SeedCircuit, bip39_salt_for};
+use proofofseed_circuits::{MasterKeyCircuit, SeedCircuit, bip39_salt_for, hardened_child_circuit};
 use zkboo::circuit::Circuit;
 use zkboo::crypto::{HashPRG, Keccak256Hasher};
 use zkboo::prover::challenge::Party;
@@ -168,48 +168,79 @@ fn run<C: Circuit>(arena_bytes: usize, num_iters: usize, binding: &[u8], circuit
 }
 
 fn main() {
-    // The exact call the device died on: the host-supplied mock witness, the published
-    // 12-word test mnemonic, the default empty passphrase, two PBKDF2 rounds, two
-    // iterations, the gate's 32-byte binding.
+    // The exact call the device died on, plus the two other statements whose SRAM budget
+    // this has to settle. Each is charged against a real arena and its minimum served size
+    // found by bisection, so the answer is a threshold rather than a verdict at one size.
     let mnemonic = b"abandon abandon abandon abandon abandon abandon abandon abandon \
                      abandon abandon abandon about"
         .to_vec();
     let salt = bip39_salt_for(b"");
     let binding = [0x11u8; 32];
-    let circuit = SeedCircuit { mnemonic, salt, rounds: 2 };
 
     println!(
-        "BIP-39 mock prove (12 words, 2 rounds, 2 iterations) charged against a real\n\
-         linked_list_allocator arena, with the device's non-prover allocations held live.\n\
-         Host holes cost 16 B each; the device's cost 8 B — so this is the pessimistic side.\n"
+        "Minimum heap that serves each statement, using the device's own allocator, with\n\
+         its non-prover allocations held live. Host holes cost 16 B and the device's 8 B,\n\
+         so each threshold is an upper bound on the device's true need.\n"
     );
-    println!("  {:>8}  {:>10}  {:>10}  {}", "arena", "peak used", "headroom", "verdict");
-    for arena in [12_288usize, 13_312, 14_336, 15_360, 15_872, 16_896, 17_920, 18_944, 20_480] {
-        let o = run(arena, 2, &binding, &circuit);
-        let tag = if arena == 15_872 {
-            "  <- the widened build that died"
-        } else if arena == 18_944 {
-            "  <- the production split"
-        } else {
-            ""
-        };
+    println!("  {:<40} {:>12}  {:>10}", "statement", "min heap", "peak used");
+
+    let bip39 = SeedCircuit { mnemonic, salt, rounds: 2 };
+    let mk = MasterKeyCircuit { seed: alloc_seed() };
+    let hc = hardened_child_circuit();
+
+    let rows: Vec<(&str, usize, usize)> = vec![
+        threshold("BIP-39 mock, 12 words, 2 rounds", &bip39, &binding),
+        threshold("master key, 64-byte seed", &mk, &binding),
+        threshold("hardened child (the shipping statement)", &hc, &binding),
+    ];
+    for (label, min_heap, peak) in &rows {
+        println!("  {label:<40} {min_heap:>10} B  {peak:>8} B");
+    }
+
+    // Deliberately no per-statement fit/no-fit verdict here. These thresholds are upper
+    // bounds on the device's need, not the need itself, and the gap is large: this arena
+    // puts master key at 19,200 B, while the device served that same statement in a
+    // 15,872 B heap on 2026-08-23. The circuit's own Vec<WordRef> buffers are
+    // pointer-width dependent even though the prover's internal pools are not, so a
+    // 64-bit host inflates them.
+    //
+    // What the numbers above are good for is the ORDER (BIP-39 is much the cheapest, the
+    // two HMAC statements are close to each other) and for proving a fit: anything served
+    // here is served on the device. To learn what a statement actually needs, shrink
+    // HEAP_SIZE on hardware until it stops -- which is safe, because a heap shortfall
+    // raises a Rust allocation failure, and this app's io_new panic handler answers the
+    // APDU with 0xE000 and exits cleanly. A stack shortfall is the one that wipes.
+    println!(
+        "\nThese are UPPER BOUNDS, not requirements. The device served master key in a\n\
+         15,872 B heap while this arena demands {} B for it, so do not read a threshold\n\
+         here as what the device needs -- only as a size that certainly works.",
+        rows[1].1,
+    );
+}
+
+/// A 64-byte seed, the realistic witness length rather than the compiled-in test vector.
+fn alloc_seed() -> Vec<u8> {
+    return (0..64).map(|i| ((i * 7 + 3) & 0xFF) as u8).collect();
+}
+
+/// Smallest arena that serves `circuit`, by bisection, with the peak it used there.
+fn threshold<C: Circuit>(label: &'static str, circuit: &C, binding: &[u8]) -> (&'static str, usize, usize) {
+    let (mut lo, mut hi) = (4_096usize, 40_960usize);
+    let mut peak_at_hi = 0;
+    // Establish that the upper bound really is served, so a bisection that never finds a
+    // served size is visible as such instead of returning the bound itself.
+    let top = run(hi, 2, binding, circuit);
+    assert!(top.served, "{label}: even {hi} B was refused");
+    peak_at_hi = top.peak_used;
+    while hi - lo > 256 {
+        let mid = (lo + hi) / 2 / 256 * 256;
+        let o = run(mid, 2, binding, circuit);
         if o.served {
-            println!(
-                "  {arena:>8}  {:>10}  {:>10}  SERVED{tag}",
-                o.peak_used,
-                arena - o.peak_used,
-            );
+            hi = mid;
+            peak_at_hi = o.peak_used;
         } else {
-            println!(
-                "  {arena:>8}  {:>10}  {:>10}  REFUSED {} allocation(s); first was {} B \
-                 (align {}) with {} B free{tag}",
-                o.peak_used,
-                arena.saturating_sub(o.peak_used),
-                o.oom_count,
-                o.oom_size,
-                o.oom_align,
-                o.oom_free,
-            );
+            lo = mid;
         }
     }
+    return (label, hi, peak_at_hi);
 }
