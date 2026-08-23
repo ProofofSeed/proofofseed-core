@@ -13,10 +13,19 @@
 //! operation, through both phases the app runs (the challenge pass, then the streamed
 //! proof), and reports the deepest excursion below the frame that started the run.
 //!
-//! Read it as a *ratio between statements*, never as a device figure. Host codegen,
-//! calling convention and inlining all differ from Thumb-2 on the secure element, so the
-//! absolute byte counts do not transfer. What does transfer is which statement is deeper
-//! and by how much, since every row here is built by one compiler with one set of flags.
+//! ⚠️ **Do not infer the device's ordering from this.** That is what these numbers were
+//! originally claimed to be good for, and the device falsified it on 2026-08-23: this
+//! table ranks BIP-39 as the *shallowest* of the three statements (-5.5% against the
+//! hardened child), while the device measured it as much the *deepest* — 19,320 B against
+//! a master key's 17,192 B. The ranking inverts. Host codegen, calling convention and
+//! inlining all differ from Thumb-2 on the secure element, and they differ *per circuit*,
+//! not by a common factor.
+//!
+//! What this is still good for is the questions that live inside one row: whether a
+//! statement's depth grows with a parameter (it does not grow with the BIP-39 round
+//! count, here or on the device), and whether a change to the circuits moved the depth at
+//! all. For any cross-statement comparison, and for any absolute figure, ask the device
+//! through its telemetry instruction instead.
 //!
 //! Run: `cargo run --release -p proofofseed-host --example stack_profile`
 
