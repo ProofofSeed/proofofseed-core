@@ -38,3 +38,7 @@ zkboo-hmac = { version = "1.0.0" }
 zkboo-sha2 = { version = "1.0.0" }
 # Independent BIP-32 reference for the Bitcoin recovery-statement vectors.
 bitcoin = "0.32"
+# The device's own allocator, so an experiment can charge a prove against a heap of the
+# device's exact size and see the headers, alignment padding and first-fit fragmentation
+# that a byte-counting tracker is blind to (examples/device_arena.rs).
+linked_list_allocator = "0.10"

@@ -109,9 +109,26 @@ impl ResponseDataCollector<[u8; 32], [u8; 32]> for DiscardSink {
 }
 
 /// The heap the committed SRAM split gives the prover (`HEAP_SIZE` in the app's
-/// `.cargo/config.toml`). Everything measured here has to fit under it, alongside the
-/// non-prover allocations the device also holds live at the peak.
-const DEVICE_HEAP: usize = 18_944;
+/// `.cargo/config.toml`).
+///
+/// 🔴 **The peaks below do not transfer to the device, and the verdicts against this
+/// budget are screening only.** Measured on hardware on 2026-08-24, a one-response
+/// master-key proof peaks at 11,747 B where this example reports 16,932 B — the host
+/// overstates by 44%. The configuration is not the cause: this example already uses the
+/// device's own `RC = u8`, Keccak-256, flash comb tables and discarding sink, and it
+/// reproduces exactly against current sources. The allocation *counts* agree (24 here,
+/// 26 on the device) while the sizes do not, which points at buffer lengths counted in
+/// pointer-sized units on a 64-bit host.
+///
+/// Because the effect depends on how much of a given statement's peak is pointer-indexed,
+/// it is not a fixed offset and not a fixed ratio, so these figures **cannot be rescaled**
+/// into device figures. Use them to rank and to screen; take every number that reaches a
+/// document from the device's own `heap_peak` telemetry (`ledger-app/host/bench_matrix.py`,
+/// rows under `ledger-app/docs/bench/`).
+///
+/// A conclusion previously drawn from these figures — that the normal-child statement
+/// cannot fit — was withdrawn for exactly this reason.
+const DEVICE_HEAP: usize = 13_312;
 
 fn peak_of<C: Circuit>(label: &str, circuit: &C) {
     PEAK.store(CURRENT.load(Ordering::Relaxed), Ordering::Relaxed);
