@@ -948,9 +948,10 @@ mod tests {
     use super::harness::{VecSink, WTP, gen_stream, output_of};
     use super::*;
     use proofofseed_circuits::{
-        comb::ComputedComb, HardenedChildCircuit, NormalChildCircuit, PubKeyCircuit,
-        Slip10ChildCircuit,
+        comb::ComputedComb, HardenedChildCircuit, MasterKeyCircuit, NormalChildCircuit,
+        PubKeyCircuit, Slip10ChildCircuit,
     };
+    use std::collections::BTreeSet;
     use core::cell::RefCell;
     use zkboo::prover::challenge::ChallengeBuilder;
     use zkboo::prover::proof::build_proof_custom;
@@ -1087,6 +1088,28 @@ mod tests {
 
         // Mismatched binding.
         assert!(!verify(HARDENED_CHILD, &output, &stream, 6, b"tx_b", 0, None, None, 0));
+    }
+
+    #[test]
+    fn a_proofs_size_is_bimodal_in_the_challenge_by_the_input_share() {
+        // A response carries party 2's input share only for challenges 1 and 2, so a
+        // one-response proof has exactly two possible sizes and they differ by the input
+        // share. This is not noise and it is not drift: an off-device size estimate drawn
+        // from one fixed seed will disagree with a device that drew the other branch, by
+        // that exact amount. Recording it as "run-to-run variation" understates it —
+        // the magnitude is a property of the circuit's witness, and is predictable.
+        let seed = vec![0xA5u8; 16];
+        let circuit = MasterKeyCircuit { seed: seed.clone() };
+        let sizes: BTreeSet<usize> = (0u8..24)
+            .map(|i| gen_stream(&circuit, 1, &[i], b"binding").len())
+            .collect();
+        assert_eq!(sizes.len(), 2, "expected exactly two sizes, got {sizes:?}");
+        let (small, large) = (*sizes.iter().next().unwrap(), *sizes.iter().last().unwrap());
+        assert_eq!(
+            large - small,
+            seed.len(),
+            "the two sizes must differ by the input share, i.e. the witness length"
+        );
     }
 
     #[test]

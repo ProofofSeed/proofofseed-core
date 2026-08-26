@@ -7,7 +7,7 @@ description = "The six ProofofSeed statements as ZKBoo circuits, with test vecto
 
 [dependencies]
 # Resolved to the local working trees by the workspace root's [patch.crates-io].
-zkboo = { version = "1.0.0", default-features = false, features = [
+zkboo = { version = "2.0.0", default-features = false, features = [
     "u32",
     "u64",
     "keccak",
@@ -16,13 +16,13 @@ zkboo = { version = "1.0.0", default-features = false, features = [
 zeroize = { version = "1", default-features = false }
 # 1.1.0 for `bip39_seed_with_salt_words`: the BIP-39 salt is witness here, and the
 # 1.0.0 entry point can only allocate it as public constants.
-zkboo-bip32 = { version = "1.1.0" }
-zkboo-ecc = { version = "1.0.0" }
+zkboo-bip32 = { version = "2.0.0" }
+zkboo-ecc = { version = "2.0.0" }
 # Circuit-structure fingerprinting, bound into the deterministic prover entropy of
 # the ranged proving mode (see src/ranged.rs).
-zkboo-circuit-hash = { version = "1.0.0" }
+zkboo-circuit-hash = { version = "2.0.0" }
 # Only for the `flash-comb` feature: reconstructing precomputed Montgomery limbs.
-zkboo-modular = { version = "1.0.0", optional = true }
+zkboo-modular = { version = "2.0.0", optional = true }
 
 [features]
 default = []
@@ -36,6 +36,6 @@ flash-comb = ["dep:zkboo-modular"]
 # builds the flash tables. Without it the parity tests would compile to nothing
 # whenever the feature was off — a check that silently disappears is not a check.
 proofofseed-circuits = { path = ".", features = ["flash-comb"] }
-zkboo-circuit-hash = { version = "1.0.0" }
-zkboo-ecc = { version = "1.0.0" }
-zkboo-modular = { version = "1.0.0" }
+zkboo-circuit-hash = { version = "2.0.0" }
+zkboo-ecc = { version = "2.0.0" }
+zkboo-modular = { version = "2.0.0" }
