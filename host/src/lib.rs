@@ -300,6 +300,46 @@ pub fn curve_statement_output(
     Some(proofofseed_circuits::serialize_words(&words))
 }
 
+/// The public output of a hardened-child statement proved against a device-held parent.
+///
+/// The counterpart of [curve_statement_output] for the one remaining statement whose
+/// witness is a key the host cannot compile in: the hardened-child rows of a device
+/// benchmark derive their parent from the device's own seed, so they had no expected
+/// output and were recorded as unverified. A host that holds the same mnemonic derives
+/// the same parent, and this turns that parent into the bytes a verifier expects.
+///
+/// As with the curve statements the output is taken from the circuit's own execution
+/// rather than recomputed, because the backend appends an assertion word that a
+/// hand-written copy of the output framing omits.
+///
+/// `family` is the derivation-family wire byte (0 = BIP-32/secp256k1,
+/// 1 = SLIP-10/ed25519); the two build different circuits. Returns `None` for any other
+/// family, and the SLIP-10 circuit panics on a non-hardened index.
+pub fn hardened_child_statement_output(
+    family: u8,
+    parent_priv: &[u8],
+    chain_code: &[u8],
+    index: u32,
+) -> Option<Vec<u8>> {
+    use proofofseed_circuits::{HardenedChildCircuit, Slip10ChildCircuit};
+    use zkboo::executor::{OwnedFlexibleWordPool, exec};
+    type WP = OwnedFlexibleWordPool<RC>;
+    let words = match family {
+        0 => exec::<_, WP>(&HardenedChildCircuit {
+            chain_code: chain_code.to_vec(),
+            parent_priv: parent_priv.to_vec(),
+            index,
+        }),
+        1 => exec::<_, WP>(&Slip10ChildCircuit {
+            chain_code: chain_code.to_vec(),
+            parent_priv: parent_priv.to_vec(),
+            index,
+        }),
+        _ => return None,
+    };
+    Some(proofofseed_circuits::serialize_words(&words))
+}
+
 /// Verifies a streamed proof for the given statement, request-anchored: the
 /// verifier reconstructs the circuit from the *public* parameters it asserts and
 /// checks the proof against the output it expects, never trusting the device's
@@ -907,6 +947,10 @@ pub mod derive {
 mod tests {
     use super::harness::{VecSink, WTP, gen_stream, output_of};
     use super::*;
+    use proofofseed_circuits::{
+        comb::ComputedComb, HardenedChildCircuit, NormalChildCircuit, PubKeyCircuit,
+        Slip10ChildCircuit,
+    };
     use core::cell::RefCell;
     use zkboo::prover::challenge::ChallengeBuilder;
     use zkboo::prover::proof::build_proof_custom;
@@ -1043,6 +1087,102 @@ mod tests {
 
         // Mismatched binding.
         assert!(!verify(HARDENED_CHILD, &output, &stream, 6, b"tx_b", 0, None, None, 0));
+    }
+
+    #[test]
+    fn supplied_key_statement_outputs_are_what_a_verifier_must_hold() {
+        // Both output helpers exist because a device proves against a key the host cannot
+        // compile in. What has to be true of them is not that they return bytes but that
+        // they return *the* bytes a verifier holds: a proof made with the supplied key
+        // verifies against them, and one made with a neighbouring key does not. Without
+        // the second half this passes for a helper that returns any fixed circuit's
+        // output, which is exactly the failure the benchmark's `verified: None` rows hid.
+        let cc = [7u8; 32];
+        let key = [3u8; 32];
+        let other = [4u8; 32];
+        let hardened = 0x8000_0005u32;
+
+        let real = HardenedChildCircuit {
+            chain_code: cc.to_vec(),
+            parent_priv: key.to_vec(),
+            index: hardened,
+        };
+        let stream = gen_stream(&real, 4, b"e", b"tx");
+        let expected = hardened_child_statement_output(0, &key, &cc, hardened).unwrap();
+        assert_eq!(expected, output_of(&real), "helper must execute the real circuit");
+        assert!(
+            verify(HARDENED_CHILD, &expected, &stream, 4, b"tx", 0, Some(&cc), Some(hardened), 0),
+            "hardened child should verify against the supplied parent's output"
+        );
+        let wrong = hardened_child_statement_output(0, &other, &cc, hardened).unwrap();
+        assert_ne!(wrong, expected, "a different parent must give a different output");
+        assert!(
+            !verify(HARDENED_CHILD, &wrong, &stream, 4, b"tx", 0, Some(&cc), Some(hardened), 0),
+            "a neighbouring parent's output must be rejected"
+        );
+
+        let sl = Slip10ChildCircuit {
+            chain_code: cc.to_vec(),
+            parent_priv: key.to_vec(),
+            index: hardened,
+        };
+        let sl_stream = gen_stream(&sl, 4, b"e", b"tx");
+        let sl_expected = hardened_child_statement_output(1, &key, &cc, hardened).unwrap();
+        assert_ne!(sl_expected, expected, "the two families are different circuits");
+        assert!(
+            verify(
+                HARDENED_CHILD, &sl_expected, &sl_stream, 4, b"tx", 0, Some(&cc),
+                Some(hardened), 1
+            ),
+            "slip-10 child should verify against the supplied parent's output"
+        );
+
+        assert!(
+            hardened_child_statement_output(2, &key, &cc, hardened).is_none(),
+            "an unknown family has no output"
+        );
+    }
+
+    #[test]
+    fn curve_statement_outputs_for_a_supplied_key_verify_a_real_proof() {
+        // The same check for the curve statements, which the benchmark also recorded as
+        // unverified until their outputs could be derived. One response each: these are
+        // the expensive statements and the property under test does not need more.
+        let key = [3u8; 32];
+        let other = [4u8; 32];
+        let cc = [7u8; 32];
+
+        let pk = PubKeyCircuit::<ComputedComb>::new(key.to_vec());
+        let pk_stream = gen_stream(&pk, 1, b"e", b"tx");
+        let pk_expected = curve_statement_output(PUBLIC_KEY, &key, None, None).unwrap();
+        assert!(
+            verify(PUBLIC_KEY, &pk_expected, &pk_stream, 1, b"tx", 0, None, None, 0),
+            "public key should verify against the supplied key's output"
+        );
+        let pk_wrong = curve_statement_output(PUBLIC_KEY, &other, None, None).unwrap();
+        assert_ne!(pk_wrong, pk_expected);
+        assert!(
+            !verify(PUBLIC_KEY, &pk_wrong, &pk_stream, 1, b"tx", 0, None, None, 0),
+            "a neighbouring key's public key must be rejected"
+        );
+
+        let nc = NormalChildCircuit::<ComputedComb>::new(cc.to_vec(), key.to_vec(), 0);
+        let nc_stream = gen_stream(&nc, 1, b"e", b"tx");
+        let nc_expected =
+            curve_statement_output(NORMAL_CHILD, &key, Some(&cc), Some(0)).unwrap();
+        assert!(
+            verify(NORMAL_CHILD, &nc_expected, &nc_stream, 1, b"tx", 0, Some(&cc), Some(0), 0),
+            "normal child should verify against the supplied parent's output"
+        );
+
+        assert!(
+            curve_statement_output(MASTER_KEY, &key, None, None).is_none(),
+            "a non-curve statement has no curve output"
+        );
+        assert!(
+            curve_statement_output(NORMAL_CHILD, &key, None, None).is_none(),
+            "the normal child needs its public parameters"
+        );
     }
 
     #[test]
