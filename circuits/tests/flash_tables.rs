@@ -93,12 +93,18 @@ fn the_flash_sourced_circuits_fingerprint_as_the_computed_ones() {
 
 /// A source whose windows are a different width — the failure the shape test exists
 /// for, in the smallest form that produces one.
+///
+/// One *wider*, not one narrower. The affine comb requires a window width that does not
+/// divide the 256-bit scalar (its top window is fail-closed and must be partial), so the
+/// obvious `- 1` gives 4, which divides 256 and now panics inside the comb before the
+/// fingerprints are ever compared. Six is the nearest width that is both valid and
+/// different from the default.
 struct WrongWidth;
 
 impl CombTableSource for WrongWidth {
     type Tables = ComputedWindowTables<u64, 4, Secp256k1PM>;
     fn make() -> Self::Tables {
-        ComputedWindowTables::new(Secp256k1PM.g(), DEFAULT_COMB_WINDOW_BITS - 1)
+        ComputedWindowTables::new(Secp256k1PM.g(), DEFAULT_COMB_WINDOW_BITS + 1)
     }
 }
 
