@@ -253,6 +253,53 @@ pub fn expected_output(statement: u8, rounds: usize, family: u8) -> Option<Vec<u
     Some(proofofseed_circuits::serialize_words(&words))
 }
 
+/// The public output a curve statement produces for a *given* private key.
+///
+/// [expected_output] executes the canonical test vector, and [seed_statement_output]
+/// covers the statements whose witness is a seed. Neither answers the question a
+/// benchmark asks of the curve statements, whose witness is a key derived from the
+/// device's own seed — so those runs had no expected output and were recorded as
+/// unverified: proofs made and never checked.
+///
+/// This executes the real circuit with the supplied witness rather than recomputing what
+/// the circuit ought to produce. That distinction is not academic: circuit outputs now
+/// carry a trailing assertion word emitted by the backend, and any hand-written copy of
+/// the output format silently omits it and rejects every honest proof.
+///
+/// `chain_code` and `index` are the normal-child statement's public parameters and are
+/// ignored by the others. Returns `None` for a statement that is not a curve statement.
+pub fn curve_statement_output(
+    statement: u8,
+    private_key: &[u8],
+    chain_code: Option<&[u8]>,
+    index: Option<u32>,
+) -> Option<Vec<u8>> {
+    use proofofseed_circuits::{AddressCircuit, NormalChildCircuit, PubKeyCircuit};
+    use zkboo::executor::{OwnedFlexibleWordPool, exec};
+    type WP = OwnedFlexibleWordPool<RC>;
+    let key = private_key.to_vec();
+    // Named with the default table source, exactly as the canonical constructors are:
+    // the source moves neither the output nor the fingerprint (pinned by tests in
+    // `circuits/tests/flash_tables.rs`), but the type parameter has to be pinned somewhere.
+    let words = match statement {
+        PUBLIC_KEY => {
+            let circuit: PubKeyCircuit = PubKeyCircuit::new(key);
+            exec::<_, WP>(&circuit)
+        }
+        ETH_ADDRESS => {
+            let circuit: AddressCircuit = AddressCircuit::new(key);
+            exec::<_, WP>(&circuit)
+        }
+        NORMAL_CHILD => {
+            let circuit: NormalChildCircuit =
+                NormalChildCircuit::new(chain_code?.to_vec(), key, index?);
+            exec::<_, WP>(&circuit)
+        }
+        _ => return None,
+    };
+    Some(proofofseed_circuits::serialize_words(&words))
+}
+
 /// Verifies a streamed proof for the given statement, request-anchored: the
 /// verifier reconstructs the circuit from the *public* parameters it asserts and
 /// checks the proof against the output it expects, never trusting the device's

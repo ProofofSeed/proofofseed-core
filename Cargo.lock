@@ -419,12 +419,13 @@ dependencies = [
 
 [[package]]
 name = "zkboo-bip32"
-version = "1.1.0"
+version = "1.1.1"
 dependencies = [
  "zkboo",
  "zkboo-ecc",
  "zkboo-hmac",
  "zkboo-keccak",
+ "zkboo-modular",
  "zkboo-ripemd160",
  "zkboo-sha2",
 ]
@@ -438,7 +439,7 @@ dependencies = [
 
 [[package]]
 name = "zkboo-ecc"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "zkboo",
  "zkboo-modular",
