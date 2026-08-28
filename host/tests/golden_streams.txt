@@ -1,34 +1,46 @@
-# Proof-byte-neutrality golden fixtures for the extraction from ledger-app.
-# Recorded from the ledger-app source tree, which was the source of truth for these
-# bytes at the time; each row is `name byte_length keccak256(stream)`. The extracted
-# crates must reproduce every stream byte-identically (tests/golden_streams.rs).
-# Never regenerate this file from this repository's own code — that would make the
-# check circular and assert nothing. Since 2026-08-22 ledger-app consumes these
-# crates rather than carrying its own copies, so there is no longer a second
-# implementation to record from: the fixture is now a historical anchor to the bytes
-# ledger-app@86a4656 produced, and re-recording means checking that commit out.
+# Proof-byte pins: the streams this repository's circuits and prover produce, so that a
+# change to either is seen rather than assumed. Each row is `name byte_length keccak256(stream)`.
 #
-# Re-anchored 2026-08-22, one row only: `raw/bip39-r2/n2` moved from 153,980 B when the
-# BIP-39 statement's PBKDF2 salt became witness instead of a public circuit constant.
-# The salt is "mnemonic" followed by the passphrase, so as a constant it was published to
-# whoever verified the proof. The move is +28 B over two responses = +14 B per response,
-# and the test vector's salt is 14 bytes ("mnemonicTREZOR"): one input-share byte per
-# salt byte, which is the whole of the cost. The other eight rows did not move, and the
-# test now reports every row rather than stopping at the first, so that "only this one
-# moved" is something it establishes rather than something the reader assumes.
+# WHAT THIS FIXTURE IS, AND WHAT IT STOPPED BEING
 #
-# First recorded at ledger-app 86a4656 (the extraction acceptance). Re-recorded
-# 2026-08-21 at ledger-app 130cb2e, where the deterministic-entropy transcript began
-# absorbing zkboo's PROOF_FORMAT_VERSION: that moves the `derived/` rows by design and
-# must leave the `raw/` rows alone, which it did — those four are unchanged from the
-# original recording, including the ranged elephant slice, and they are the control on
-# any future change that is meant to touch only one of the two groups.
+# It began as the extraction acceptance: recorded from the untouched ledger-app tree at
+# 86a4656, it showed that moving the circuits and the prover into this repository left
+# every proof byte alone. That claim was established and it stands in the history — the
+# fixture passed, unaltered, from the extraction through 6c5978c.
+#
+# It can no longer serve that purpose. ZKBoo 2.0.0 is a breaking format change (proof
+# format version 3, an assertion word appended to every circuit's outputs, a rebuilt
+# elliptic-curve comb), so no tree that exists today reproduces the 1.x bytes, and the
+# second implementation to record from is long gone. Re-anchoring here is therefore
+# circular with respect to the extraction, and the extraction is NOT what these rows
+# assert any more. What they assert is narrower and still worth having: proof bytes do
+# not move unless a change is meant to move them, and when one is, exactly the intended
+# rows move and the others are seen not to.
+#
+# Re-anchored 2026-08-28 against ZKBoo 2.0.0. Eight of the nine rows moved:
+#   - `raw/bip39-r2/n2` and the `derived/hardened_child/*` rows shrank, the hardened-child
+#     ones by 32 B per response, which is that statement's witness (32 parent-key bytes)
+#     appearing or not with the challenge — these responses are bimodal in size, so a row
+#     moving by exactly one input share is a coin landing the other way, not a defect.
+#   - `derived/slip10_child/n4/full` kept its length and changed digest: the `derived/`
+#     rows key their prover entropy on the circuit fingerprint, which 2.0.0 moved.
+#   - `raw/public_key/*` fell by 3.77x, the elliptic-curve reduction 2.0.0 was built for.
+#   - `raw/master_key/n2` did NOT move, in length or digest. It is the one row whose
+#     circuit 2.0.0 left alone and whose entropy is raw rather than derived, so it is the
+#     control: a future change that claims to touch only the curve statements has to leave
+#     this row exactly as it is.
+#
+# Earlier history: first recorded at ledger-app 86a4656; re-recorded 2026-08-21 at
+# ledger-app 130cb2e when the deterministic-entropy transcript began absorbing zkboo's
+# PROOF_FORMAT_VERSION (which moved the `derived/` rows and left the `raw/` ones alone);
+# `raw/bip39-r2/n2` re-anchored 2026-08-22 when the BIP-39 PBKDF2 salt became witness
+# instead of a public circuit constant, at one input-share byte per salt byte.
 raw/master_key/n2 102594 446f846c799db0bfd14f1826d4cdda0811aa6b9b1691e958e8e3c765be63792a
-raw/bip39-r2/n2 154008 9cbcee782163f0d2a588e89a582f619451ca8d308d39fe2fdcb515f379281d75
-derived/hardened_child/n4/full 206700 faffe426f06c5940c407fbd2c8697d8882f3b98d6f89833d1d8888b576f9fc7a
-derived/hardened_child/n4/seg0-2 103350 b619eacb63ccad6e06d29cf98ae6eb3a4ac425f7ea91ca2952ad45b02cf2afbd
-derived/hardened_child/n4/seg2-3 51659 de223c76c0537c0c5a49b667cb6b212630b35162c06f3150f969b5e14d8318ed
-derived/hardened_child/n4/seg3-4 51691 e84b76d1847acb6c1dc2292bfbc8eedb8340eec0c417226bd0938bb00b33527e
-derived/slip10_child/n4/full 205220 634a312789bc05b4c4f7fdfa509faecdd96638e29bfe26f5af18515ef801ca16
-raw/public_key/n2/full 22560252 a33229766340eb88b3c8909dfaee6b0dd634f7def63c68796a4fb97b4cd26abd
-raw/public_key/n2/seg1-2 11280126 769c8d5c05841f2dbd05fc931a90d1832ae7618ed321df2d195eeb0c9d8d9776
+raw/bip39-r2/n2 153794 a0c478a4eafed64074f8adbb33c317d3d1b28866956fa4f38cfe4889eff91cd7
+derived/hardened_child/n4/full 206636 19e9e1abee6bd6f951f1fdf8853795ca3199ea13c0463500e89e517885a02e1b
+derived/hardened_child/n4/seg0-2 103318 b7d2d4aa0b359baf1ebc8b588598034a9ca8bcfc8e59bd73b224ac9706277584
+derived/hardened_child/n4/seg2-3 51659 3068869d42ba661e49744ce5a39fabca827a7e882fa31f206aa6e4c2188204b9
+derived/hardened_child/n4/seg3-4 51659 f7faef8c34e2c3f9ebb807d67dbe07767ccbdd0c19a07b6ceeedb4fafbef6923
+derived/slip10_child/n4/full 205220 758d387ed3d6d82a3201a1ffe661c8b50c8e93b51834ff6e1154b43bb6b7ec8a
+raw/public_key/n2/full 5989622 9fccc5fe1430647875a42fee34947354746d77d403d8d5d1ab1a726631e63d82
+raw/public_key/n2/seg1-2 2993947 cd8bc4cfc4d6cf0e2d5eb41158e40652e549011b9db98ad722a4d9b6d09b80e6
