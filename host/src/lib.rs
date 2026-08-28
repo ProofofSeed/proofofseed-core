@@ -836,8 +836,8 @@ pub mod harness {
 pub mod derive {
     use super::harness::exec_words;
     use proofofseed_circuits::{
-        comb::ComputedComb, HardenedChildCircuit, MasterKeyCircuit, NormalChildCircuit,
-        SeedCircuit,
+        comb::ComputedComb, checked_payload, HardenedChildCircuit, MasterKeyCircuit,
+        NormalChildCircuit, SeedCircuit,
         Slip10ChildCircuit, Slip10MasterCircuit,
     };
     use zeroize::{Zeroize, Zeroizing};
@@ -856,11 +856,12 @@ pub mod derive {
     pub fn bip39_seed(mnemonic: &[u8], passphrase: &[u8]) -> Zeroizing<Vec<u8>> {
         let mut salt = b"mnemonic".to_vec();
         salt.extend_from_slice(passphrase);
-        let mut words = exec_words(&SeedCircuit {
+        let mut words = checked_payload(exec_words(&SeedCircuit {
             mnemonic: mnemonic.to_vec(),
             salt,
             rounds: 2048,
-        });
+        }))
+        .expect("the BIP-39 seed circuit makes no assertion that can fail");
         let seed = Zeroizing::new(words.u8.clone());
         words.u8.zeroize();
         seed
@@ -869,7 +870,12 @@ pub mod derive {
     /// Splits a BIP-32 master/child circuit output into a [Node]. The child
     /// circuits emit the key as four little-endian-ordered u64 limbs; the master
     /// emits plain bytes.
-    fn bip32_node_of(mut words: Words) -> Node {
+    fn bip32_node_of(words: Words) -> Node {
+        // The assertion word is checked and removed before anything is sliced: it is a
+        // u8 and therefore sits at the end of `u8` for the master statement, whose
+        // payload is bytes, *and* for the child statements, whose payload is u64 limbs.
+        let mut words = checked_payload(words)
+            .expect("a BIP-32 derivation step asserted a non-finite public key");
         let mut private_key = Zeroizing::new([0u8; 32]);
         let chain_code: [u8; 32];
         if words.u64.len() == 4 {
@@ -930,7 +936,9 @@ pub mod derive {
         Some(node)
     }
 
-    fn slip10_node_of(mut words: Words) -> Node {
+    fn slip10_node_of(words: Words) -> Node {
+        let mut words = checked_payload(words)
+            .expect("the SLIP-10 derivation circuits make no assertion that can fail");
         let mut private_key = Zeroizing::new([0u8; 32]);
         private_key.copy_from_slice(&words.u8[..32]);
         let chain_code: [u8; 32] = words.u8[32..64].try_into().expect("chain code bytes");
@@ -948,9 +956,10 @@ mod tests {
     use super::harness::{VecSink, WTP, gen_stream, output_of};
     use super::*;
     use proofofseed_circuits::{
-        comb::ComputedComb, HardenedChildCircuit, NormalChildCircuit, PubKeyCircuit,
-        Slip10ChildCircuit,
+        comb::ComputedComb, HardenedChildCircuit, MasterKeyCircuit, NormalChildCircuit,
+        PubKeyCircuit, Slip10ChildCircuit,
     };
+    use std::collections::BTreeSet;
     use core::cell::RefCell;
     use zkboo::prover::challenge::ChallengeBuilder;
     use zkboo::prover::proof::build_proof_custom;
@@ -1087,6 +1096,28 @@ mod tests {
 
         // Mismatched binding.
         assert!(!verify(HARDENED_CHILD, &output, &stream, 6, b"tx_b", 0, None, None, 0));
+    }
+
+    #[test]
+    fn a_proofs_size_is_bimodal_in_the_challenge_by_the_input_share() {
+        // A response carries party 2's input share only for challenges 1 and 2, so a
+        // one-response proof has exactly two possible sizes and they differ by the input
+        // share. This is not noise and it is not drift: an off-device size estimate drawn
+        // from one fixed seed will disagree with a device that drew the other branch, by
+        // that exact amount. Recording it as "run-to-run variation" understates it —
+        // the magnitude is a property of the circuit's witness, and is predictable.
+        let seed = vec![0xA5u8; 16];
+        let circuit = MasterKeyCircuit { seed: seed.clone() };
+        let sizes: BTreeSet<usize> = (0u8..24)
+            .map(|i| gen_stream(&circuit, 1, &[i], b"binding").len())
+            .collect();
+        assert_eq!(sizes.len(), 2, "expected exactly two sizes, got {sizes:?}");
+        let (small, large) = (*sizes.iter().next().unwrap(), *sizes.iter().last().unwrap());
+        assert_eq!(
+            large - small,
+            seed.len(),
+            "the two sizes must differ by the input share, i.e. the witness length"
+        );
     }
 
     #[test]
@@ -1282,11 +1313,15 @@ mod tests {
         // The BIP-32 vector constants are anchored directly to the circuits, so a
         // corrupted constant fails here rather than silently anchoring nothing (the
         // SLIP-10 constants get the same treatment in tests/solana.rs).
-        use proofofseed_circuits::{EXPECTED_HARDENED_CC, EXPECTED_HARDENED_PRIV, EXPECTED_MASTER};
+        use proofofseed_circuits::{
+            EXPECTED_HARDENED_CC, EXPECTED_HARDENED_PRIV, EXPECTED_MASTER, checked_payload,
+        };
         let to_hex = |b: &[u8]| b.iter().map(|x| format!("{x:02x}")).collect::<String>();
-        let master = super::harness::exec_words(&master_key_circuit());
+        let master = checked_payload(super::harness::exec_words(&master_key_circuit()))
+            .expect("master-key assertions hold");
         assert_eq!(to_hex(&master.u8), EXPECTED_MASTER);
-        let child = super::harness::exec_words(&hardened_child_circuit());
+        let child = checked_payload(super::harness::exec_words(&hardened_child_circuit()))
+            .expect("hardened-child assertions hold");
         assert_eq!(to_hex(&child.u8), EXPECTED_HARDENED_CC);
         let priv_be: Vec<u8> =
             child.u64.iter().rev().flat_map(|l| l.to_be_bytes()).collect();

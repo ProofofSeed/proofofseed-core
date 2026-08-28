@@ -36,18 +36,25 @@ fn to_hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
+/// A circuit's outputs with the trailing assertion word checked and removed. None of
+/// the SLIP-10 circuits can assert falsely — they touch no curve — so an execution that
+/// reports otherwise here is a defect rather than a degenerate key.
+fn payload(words: zkboo::word::Words) -> zkboo::word::Words {
+    proofofseed_circuits::checked_payload(words).expect("SLIP-10 assertions hold")
+}
+
 /// Walks a SLIP-10 chain through the shared circuits: master from `seed`, then one
 /// child step per (raw, unhardened) index. Returns `(key, chain code)` per node.
 fn slip10_chain(seed: &[u8], path: &[u32]) -> Vec<(Vec<u8>, Vec<u8>)> {
-    let master = exec_words(&Slip10MasterCircuit { seed: seed.to_vec() });
+    let master = payload(exec_words(&Slip10MasterCircuit { seed: seed.to_vec() }));
     let mut nodes = vec![(master.u8[..32].to_vec(), master.u8[32..].to_vec())];
     for &index in path {
         let (key, cc) = nodes.last().expect("nonempty").clone();
-        let child = exec_words(&Slip10ChildCircuit {
+        let child = payload(exec_words(&Slip10ChildCircuit {
             chain_code: cc,
             parent_priv: key,
             index: H | index,
-        });
+        }));
         nodes.push((child.u8[..32].to_vec(), child.u8[32..].to_vec()));
     }
     nodes
@@ -105,9 +112,9 @@ fn slip10_chains_match_the_published_vectors() {
 
 #[test]
 fn canonical_circuits_match_their_expected_constants() {
-    let master = exec_words(&slip10_master_circuit());
+    let master = payload(exec_words(&slip10_master_circuit()));
     assert_eq!(to_hex(&master.u8), EXPECTED_SLIP10_MASTER);
-    let child = exec_words(&slip10_child_circuit());
+    let child = payload(exec_words(&slip10_child_circuit()));
     assert_eq!(to_hex(&child.u8), EXPECTED_SLIP10_CHILD);
 }
 
@@ -134,14 +141,14 @@ fn solana_wallet_core_anchor() {
     const MNEMONIC: &[u8] =
         b"shoot island position soft burden budget tooth cruel issue economy destroy above";
     const ADDRESS: &str = "2bUBiBNZyD29gP1oV6de7nxowMLoDBtopMMTGgMvjG5m";
-    let seed = exec_words(&SeedCircuit {
+    let seed = payload(exec_words(&SeedCircuit {
         mnemonic: MNEMONIC.to_vec(),
         salt: b"mnemonic".to_vec(),
         rounds: 2048,
-    });
+    }));
     let nodes = slip10_chain(&seed.u8, &[44, 501, 0]);
     let (account_key, _) = nodes.last().expect("account node");
-    let pubkey = exec_words(&PubkeyOf { key: account_key.clone() });
+    let pubkey = payload(exec_words(&PubkeyOf { key: account_key.clone() }));
     let expected = bitcoin::base58::decode(ADDRESS).expect("valid base58 address");
     assert_eq!(pubkey.u8, expected, "public key vs the published Solana address");
 }

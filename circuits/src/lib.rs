@@ -28,10 +28,10 @@ use zkboo::word::Words;
 use zkboo_bip32::{
     be_bytes_to_word, bip39_seed_with_salt_words, ethereum_address_with_tables,
     hardened_child_key, master_key,
-    normal_child_key_with_tables, public_key_with_tables, slip10_ed25519_child,
+    normal_child_key_with_tables, public_key_affine_with_tables, slip10_ed25519_child,
     slip10_ed25519_master, HARDENED_OFFSET,
 };
-use zkboo_ecc::montgomery::PointFrontendIO;
+use zkboo_modular::montgomery::MontgomeryFrontendIO;
 
 /// Statement identifiers (the `P1` byte on the wire).
 pub const MASTER_KEY: u8 = 0;
@@ -63,6 +63,33 @@ pub fn serialize_words(w: &Words) -> Vec<u8> {
         out.extend_from_slice(&x.to_le_bytes());
     }
     out
+}
+
+/// The value the assertion word carries when every in-circuit assertion held.
+pub const ASSERTION_TRUE: u8 = 1;
+
+/// Splits a circuit's execution outputs into the payload and its assertion word.
+///
+/// Since ZKBoo 2.0.0 every circuit emits, as its **last** output word, the conjunction
+/// of the in-circuit assertions it made (`Backend::emit_assertions`). That word is a
+/// `u8`, so it is the last element of `Words::u8` whatever widths the payload itself
+/// uses — including for the curve statements, whose payload is entirely `u64`.
+///
+/// Returns `None` when the word is not [ASSERTION_TRUE]: the execution's assertions did
+/// not hold, and what remains is not a derivation result. A secp256k1 scalar of zero is
+/// the reachable case — the comb asserts that `d·G` is finite, and no proof of a
+/// violated assertion verifies.
+///
+/// Slicing the raw outputs instead reads the assertion word as payload, and the failure
+/// is silent rather than loud: a 64-byte BIP-39 seed reads as 65 bytes, the master key
+/// derived from it is some other wallet's, and the proof about it still verifies.
+///
+/// The serialized form a verifier pins ([serialize_words]) **keeps** the assertion word;
+/// it is part of what the proof commits to. Only a caller consuming the outputs as
+/// values — a derivation walk — wants it removed.
+pub fn checked_payload(mut words: Words) -> Option<Words> {
+    let assertion = words.u8.pop()?;
+    (assertion == ASSERTION_TRUE).then_some(words)
 }
 
 // ---------------------------------------------------------------------------
@@ -268,8 +295,13 @@ impl<T: CombTableSource> Circuit for PubKeyCircuit<T> {
             .collect::<Vec<_>>();
         let scalar = be_bytes_to_word(&bytes);
         let mut tables = T::make();
-        let q = public_key_with_tables(frontend, scalar, &mut tables);
-        frontend.point_output_affine(q);
+        // The comb accumulates in affine coordinates and hands back (x, y) already, so
+        // these are the coordinates it produced. Wrapping them into a Jacobian point and
+        // converting back — which is all `public_key_with_tables` does — costs a field
+        // inversion and three multiplications to arrive at the values already in hand.
+        let (x, y) = public_key_affine_with_tables(frontend, scalar, &mut tables);
+        frontend.montgomery_output(x);
+        frontend.montgomery_output(y);
     }
 }
 

@@ -24,7 +24,9 @@ use std::str::FromStr;
 
 use bitcoin::bip32::{DerivationPath, Xpriv};
 use bitcoin::secp256k1::Secp256k1;
-use proofofseed_circuits::{HARDENED_CHILD, HardenedChildCircuit, MasterKeyCircuit, SeedCircuit};
+use proofofseed_circuits::{
+    HARDENED_CHILD, HardenedChildCircuit, MasterKeyCircuit, SeedCircuit, checked_payload,
+};
 use proofofseed_host::harness::{exec_words, gen_stream, output_of};
 use proofofseed_host::verify;
 use zkboo::word::Words;
@@ -81,7 +83,8 @@ fn account_circuit(purpose: u32) -> HardenedChildCircuit {
 }
 
 /// Splits the hardened-child circuit output into `(child private key BE, chain code)`.
-fn child_priv_cc(words: &Words) -> ([u8; 32], [u8; 32]) {
+fn child_priv_cc(words: Words) -> ([u8; 32], [u8; 32]) {
+    let words = checked_payload(words).expect("hardened-child assertions hold");
     assert_eq!(words.u64.len(), 4, "child key limbs");
     assert_eq!(words.u8.len(), 32, "chain code bytes");
     let mut priv_be = [0u8; 32];
@@ -106,13 +109,15 @@ fn mnemonic_to_published_root_through_the_circuits() {
     // BIP-39 mnemonic → seed (full 2048 PBKDF2 rounds) → BIP-32 master node, both
     // steps through the exact circuits the device proves with, landing on the
     // published root key. Empty passphrase ⇒ salt "mnemonic".
-    let seed = exec_words(&SeedCircuit {
+    let seed = checked_payload(exec_words(&SeedCircuit {
         mnemonic: MNEMONIC.to_vec(),
         salt: b"mnemonic".to_vec(),
         rounds: 2048,
-    });
+    }))
+    .expect("BIP-39 seed assertions hold");
     assert_eq!(seed.u8.len(), 64, "BIP-39 seed length");
-    let master = exec_words(&MasterKeyCircuit { seed: seed.u8.clone() });
+    let master = checked_payload(exec_words(&MasterKeyCircuit { seed: seed.u8.clone() }))
+        .expect("master-key assertions hold");
     let (root_key, root_cc) = xprv_key_cc(ROOT_XPRV);
     assert_eq!(master.u8[..32], root_key, "master private key vs published root");
     assert_eq!(master.u8[32..], root_cc, "master chain code vs published root");
@@ -135,7 +140,7 @@ fn hardened_chain_from_root_to_account_matches_reference() {
                 parent_priv: key.to_vec(),
                 index: H | index,
             });
-            (key, cc) = child_priv_cc(&words);
+            (key, cc) = child_priv_cc(words);
             assert_eq!((key, cc), reference_node(&path), "node m/{path}");
         }
     }
@@ -147,7 +152,7 @@ fn account_outputs_match_published_bip84_bip86_vectors() {
     for (purpose, published) in [(84, BIP84_ACCOUNT_ZPRV), (86, BIP86_ACCOUNT_XPRV)] {
         let words = exec_words(&account_circuit(purpose));
         assert_eq!(
-            child_priv_cc(&words),
+            child_priv_cc(words),
             xprv_key_cc(published),
             "m/{purpose}'/0'/0' vs the published vector"
         );

@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-//! Proof-byte neutrality: the extracted crates must reproduce, byte for byte, the
-//! streams the pre-extraction ledger-app code produced (extraction acceptance,
-//! `knowledge/plan.md` milestone 1). The fixture (`golden_streams.txt`) was
-//! recorded from the untouched ledger-app tree at commit 86a4656; this test
-//! recomputes each stream with the same parameters and compares length and
-//! Keccak-256. Any mismatch means the move — or a later change — altered proof
-//! bytes: the deterministic-entropy transcript, the circuit fingerprints, and
-//! `DETERMINISTIC_ENTROPY_VERSION` are format commitments, not internals.
+//! Proof bytes do not move unless a change is meant to move them.
+//!
+//! This test recomputes each stream in `golden_streams.txt` with the parameters that
+//! recorded it and compares length and Keccak-256. The deterministic-entropy transcript,
+//! the circuit fingerprints and `DETERMINISTIC_ENTROPY_VERSION` are format commitments
+//! rather than internals, so any of them moving shows up here.
+//!
+//! The fixture began as the extraction acceptance — proof-byte neutrality against the
+//! pre-extraction ledger-app tree at 86a4656 — and that is no longer what it asserts;
+//! ZKBoo 2.0.0's breaking format left no tree able to reproduce the 1.x bytes. The
+//! fixture's own header records the transition and what each row is now good for.
 
 use proofofseed_circuits::ranged::{
     WitnessMaterial, deterministic_seed_entropy, ranged_request_digest,
@@ -66,7 +69,7 @@ fn derived_entropy<C: Circuit>(
 }
 
 #[test]
-fn extracted_crates_reproduce_the_pre_extraction_streams() {
+fn proof_bytes_have_not_moved_since_they_were_last_anchored() {
     let hc = hardened_child_circuit();
     let hc_e = derived_entropy(&hc, HARDENED_CHILD, Family::Bip32Secp256k1, 4);
     let sc = slip10_child_circuit();
