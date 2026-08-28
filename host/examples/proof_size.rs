@@ -2,9 +2,18 @@
 //
 //! Off-device proof-size estimator. Generates the streamed proof for each statement
 //! (host CPU, no device) and reports bytes per response, then predicts the on-device
-//! runtime from the measured ~1.9 KB/s effective rate (proof bytes / wall-clock,
-//! validated against master/hardened/bip39 on the Flex). Proof size is deterministic
-//! in the circuit and independent of the seed, so this predicts device timing.
+//! runtime from the device's measured streaming rate. Proof size is deterministic in the
+//! circuit and independent of the seed, so this predicts device timing.
+//!
+//! 🔴 The ~1.9 KB/s this used to divide by is **retracted**: its timer spanned the consent
+//! prompt, so it measured the operator as much as the device. The rate below is the mean
+//! over the 39 rows verified on a Flex on 2026-08-26/27, which span 3,234–3,500 B/s and
+//! are flat in statement, witness size, response count and proof size
+//! (`whitepaper/on-device-measurements.md`).
+//!
+//! It still predicts the *streaming* phase only. The byte-silent challenge phase is a
+//! further ~44% of device work on the curve statements and ~30–45% on the others, so a
+//! figure here is a floor on the device's total, not an estimate of it.
 //!
 //!     cargo run -p proofofseed-host --example proof_size --release
 
@@ -87,8 +96,10 @@ fn proof_size<C: Circuit>(circuit: &C, n: usize) -> usize {
 }
 
 fn main() {
-    const RATE: f64 = 1900.0; // bytes/sec effective, from the Flex benchmark
-    println!("statement           bytes/response   predicted s/response (@1.9 KB/s)");
+    const RATE: f64 = 3309.0; // bytes/sec, mean of 39 verified Flex rows (2026-08-26/27)
+    println!(
+        "statement           bytes/response   streaming s/response (@3,309 B/s; excludes the challenge phase)"
+    );
     let rows: [(&str, usize); 6] = [
         ("master_key", proof_size(&master_key_circuit(), 1)),
         ("hardened_child", proof_size(&hardened_child_circuit(), 1)),
