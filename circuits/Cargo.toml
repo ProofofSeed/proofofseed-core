@@ -21,15 +21,17 @@ zkboo-ecc = { version = "2.0.0" }
 # Circuit-structure fingerprinting, bound into the deterministic prover entropy of
 # the ranged proving mode (see src/ranged.rs).
 zkboo-circuit-hash = { version = "2.0.0" }
-# Only for the `flash-comb` feature: reconstructing precomputed Montgomery limbs.
-zkboo-modular = { version = "2.0.0", optional = true }
+# Emitting a curve statement's affine coordinates directly (`montgomery_output`), and,
+# under `flash-comb`, reconstructing the precomputed Montgomery limbs. Already in the
+# build graph as a dependency of zkboo-ecc, so naming it directly costs nothing.
+zkboo-modular = { version = "2.0.0" }
 
 [features]
 default = []
 # Carry the precomputed secp256k1 comb tables (~80 KB of constants) and the reader
 # over them, so a constrained prover can skip the native point arithmetic. Off by
 # default: a host recomputes the tables more cheaply than it carries them.
-flash-comb = ["dep:zkboo-modular"]
+flash-comb = []
 
 [dev-dependencies]
 # Self-dependency with the feature on, so `cargo test -p proofofseed-circuits` always
