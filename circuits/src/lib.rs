@@ -28,10 +28,10 @@ use zkboo::word::Words;
 use zkboo_bip32::{
     be_bytes_to_word, bip39_seed_with_salt_words, ethereum_address_with_tables,
     hardened_child_key, master_key,
-    normal_child_key_with_tables, public_key_with_tables, slip10_ed25519_child,
+    normal_child_key_with_tables, public_key_affine_with_tables, slip10_ed25519_child,
     slip10_ed25519_master, HARDENED_OFFSET,
 };
-use zkboo_ecc::montgomery::PointFrontendIO;
+use zkboo_modular::montgomery::MontgomeryFrontendIO;
 
 /// Statement identifiers (the `P1` byte on the wire).
 pub const MASTER_KEY: u8 = 0;
@@ -295,8 +295,13 @@ impl<T: CombTableSource> Circuit for PubKeyCircuit<T> {
             .collect::<Vec<_>>();
         let scalar = be_bytes_to_word(&bytes);
         let mut tables = T::make();
-        let q = public_key_with_tables(frontend, scalar, &mut tables);
-        frontend.point_output_affine(q);
+        // The comb accumulates in affine coordinates and hands back (x, y) already, so
+        // these are the coordinates it produced. Wrapping them into a Jacobian point and
+        // converting back — which is all `public_key_with_tables` does — costs a field
+        // inversion and three multiplications to arrive at the values already in hand.
+        let (x, y) = public_key_affine_with_tables(frontend, scalar, &mut tables);
+        frontend.montgomery_output(x);
+        frontend.montgomery_output(y);
     }
 }
 

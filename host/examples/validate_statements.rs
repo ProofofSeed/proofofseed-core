@@ -1,9 +1,15 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-//! Off-device validation of all six proof-of-seed statements: executes each circuit
-//! on its test vector and checks the public output, and measures the prover's peak
-//! heap (with the on-device refcount type) for the non-elephant statements, to size
-//! the device's heap/stack split.
+//! The prover's peak heap for each statement, with the on-device refcount type, measured
+//! through a tracking global allocator — which is why this is an example rather than a
+//! test: the counter is process-wide, so tests running in parallel would read each
+//! other's allocations.
+//!
+//! The output checks it also prints are a convenience view of what
+//! `circuits/tests/statement_outputs.rs` asserts. They used to live *only* here, which is
+//! how five of the six came to be failing, unnoticed, from the day ZKBoo 2.0.0 appended
+//! the assertion word: nothing ran them. This binary now exits non-zero when one
+//! mismatches, so a stale expectation cannot be read past.
 //!
 //! Run: `cargo run --release -p proofofseed-host --example validate_statements`
 
@@ -11,7 +17,7 @@ use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use proofofseed_circuits::*;
-use zkboo::backend::Backend;
+use std::process::ExitCode;
 use zkboo::circuit::Circuit;
 use zkboo::crypto::{HashPRG, Keccak256Hasher};
 use zkboo::executor::{exec, OwnedFlexibleWordPool};
@@ -76,8 +82,13 @@ fn u64x4_be_hex(limbs: &[u64]) -> String {
     )
 }
 
+static FAILURES: AtomicUsize = AtomicUsize::new(0);
+
 fn check(name: &str, got: &str, expected: &str) {
     let ok = got == expected;
+    if !ok {
+        FAILURES.fetch_add(1, Ordering::Relaxed);
+    }
     println!("  {name:<28} {}", if ok { "OK" } else { "MISMATCH" });
     if !ok {
         println!("     got      {got}");
@@ -98,37 +109,48 @@ fn prover_peak_heap<C: Circuit>(circuit: &C) -> usize {
     PEAK.load(Ordering::Relaxed)
 }
 
-fn main() {
+/// Executes a circuit and removes the trailing assertion word, so what is compared is the
+/// statement's payload rather than the payload plus one byte.
+fn payload<C: Circuit>(circuit: &C) -> Words {
+    checked_payload(exec::<C, WP>(circuit)).expect("assertions hold")
+}
+
+fn main() -> ExitCode {
     println!("Executing each statement on its test vector and checking the output:\n");
 
     // master_key
-    let o = exec::<_, WP>(&master_key_circuit());
+    let o = payload(&master_key_circuit());
     check("master_key", &u8_hex(&o.u8), EXPECTED_MASTER);
 
     // hardened_child
-    let o = exec::<_, WP>(&hardened_child_circuit());
+    let o = payload(&hardened_child_circuit());
     check("hardened_child priv", &u64x4_be_hex(&o.u64[0..4]), EXPECTED_HARDENED_PRIV);
     check("hardened_child cc", &u8_hex(&o.u8), EXPECTED_HARDENED_CC);
 
     // bip39_seed (full 2048 rounds for the canonical vector)
-    let o = exec::<_, WP>(&bip39_seed_circuit(2048));
+    let o = payload(&bip39_seed_circuit(2048));
     check("bip39_seed", &u8_hex(&o.u8), EXPECTED_BIP39_SEED);
 
     // public_key (elephant)
-    let o = exec::<_, WP>(&public_key_circuit());
+    let o = payload(&public_key_circuit());
     let pk = format!("{}{}", u64x4_be_hex(&o.u64[0..4]), u64x4_be_hex(&o.u64[4..8]));
     check("public_key", &pk, EXPECTED_PUBKEY);
 
     // normal_child (elephant)
-    let o = exec::<_, WP>(&normal_child_circuit());
+    let o = payload(&normal_child_circuit());
     check("normal_child priv", &u64x4_be_hex(&o.u64[0..4]), EXPECTED_NORMAL_PRIV);
     check("normal_child cc", &u8_hex(&o.u8), EXPECTED_NORMAL_CC);
 
     // ethereum_address (elephant)
-    let o = exec::<_, WP>(&ethereum_address_circuit());
+    let o = payload(&ethereum_address_circuit());
     check("ethereum_address", &u8_hex(&o.u8), EXPECTED_ETH_ADDRESS);
 
-    println!("\nProver peak heap (RC=u8), bounds device HEAP_SIZE:");
+    // These screen and rank; they do not size the device. Hardware has falsified the
+    // host tracker as a device bound — it overstates a one-response master-key proof by
+    // 44% — and the figures that go into documents come from the device's own allocator.
+    // The withdrawal that put this caveat on `device_heap` and `device_arena` did not
+    // reach here, and this example was still claiming to bound HEAP_SIZE.
+    println!("\nProver peak heap (RC=u8) — screens and ranks; does NOT bound device HEAP_SIZE:");
     println!("  master_key       {:6} B", prover_peak_heap(&master_key_circuit()));
     println!("  hardened_child   {:6} B", prover_peak_heap(&hardened_child_circuit()));
     println!("  bip39 (r=2)      {:6} B", prover_peak_heap(&bip39_seed_circuit(2)));
@@ -136,5 +158,12 @@ fn main() {
     println!("  public_key       {:6} B", prover_peak_heap(&public_key_circuit()));
     println!("  normal_child     {:6} B", prover_peak_heap(&normal_child_circuit()));
     println!("  ethereum_address {:6} B", prover_peak_heap(&ethereum_address_circuit()));
-    println!("\nPublic outputs above confirm all six circuits are correct.");
+    let failed = FAILURES.load(Ordering::Relaxed);
+    if failed == 0 {
+        println!("\nPublic outputs above confirm all six circuits are correct.");
+        ExitCode::SUCCESS
+    } else {
+        println!("\n{failed} output(s) MISMATCHED — see circuits/tests/statement_outputs.rs.");
+        ExitCode::FAILURE
+    }
 }

@@ -30,6 +30,12 @@
 #     control: a future change that claims to touch only the curve statements has to leave
 #     this row exactly as it is.
 #
+# Moved again 2026-08-28, `raw/public_key/*` only: the public-key statement stopped
+# wrapping the comb's affine output into a Jacobian point and converting it back. The
+# n=2 stream fell 181,086 B (3.02%) and the single response fell to 2,904,268 B. The
+# other seven rows did not move — including `raw/master_key/n2`, the control, and the
+# hardened-child rows, whose statement shares none of the curve machinery.
+#
 # Earlier history: first recorded at ledger-app 86a4656; re-recorded 2026-08-21 at
 # ledger-app 130cb2e when the deterministic-entropy transcript began absorbing zkboo's
 # PROOF_FORMAT_VERSION (which moved the `derived/` rows and left the `raw/` ones alone);
@@ -42,5 +48,5 @@ derived/hardened_child/n4/seg0-2 103318 b7d2d4aa0b359baf1ebc8b588598034a9ca8bcfc
 derived/hardened_child/n4/seg2-3 51659 3068869d42ba661e49744ce5a39fabca827a7e882fa31f206aa6e4c2188204b9
 derived/hardened_child/n4/seg3-4 51659 f7faef8c34e2c3f9ebb807d67dbe07767ccbdd0c19a07b6ceeedb4fafbef6923
 derived/slip10_child/n4/full 205220 758d387ed3d6d82a3201a1ffe661c8b50c8e93b51834ff6e1154b43bb6b7ec8a
-raw/public_key/n2/full 5989622 9fccc5fe1430647875a42fee34947354746d77d403d8d5d1ab1a726631e63d82
-raw/public_key/n2/seg1-2 2993947 cd8bc4cfc4d6cf0e2d5eb41158e40652e549011b9db98ad722a4d9b6d09b80e6
+raw/public_key/n2/full 5808536 e6d65f55ad9e84c0219c231288558cc9f45a020bf14781e83a24029725b44c6d
+raw/public_key/n2/seg1-2 2904268 9ccdb651480b300291f31624f4cf0d5dfd329497b4e53098e45931ddfe71403f
