@@ -65,6 +65,33 @@ pub fn serialize_words(w: &Words) -> Vec<u8> {
     out
 }
 
+/// The value the assertion word carries when every in-circuit assertion held.
+pub const ASSERTION_TRUE: u8 = 1;
+
+/// Splits a circuit's execution outputs into the payload and its assertion word.
+///
+/// Since ZKBoo 2.0.0 every circuit emits, as its **last** output word, the conjunction
+/// of the in-circuit assertions it made (`Backend::emit_assertions`). That word is a
+/// `u8`, so it is the last element of `Words::u8` whatever widths the payload itself
+/// uses — including for the curve statements, whose payload is entirely `u64`.
+///
+/// Returns `None` when the word is not [ASSERTION_TRUE]: the execution's assertions did
+/// not hold, and what remains is not a derivation result. A secp256k1 scalar of zero is
+/// the reachable case — the comb asserts that `d·G` is finite, and no proof of a
+/// violated assertion verifies.
+///
+/// Slicing the raw outputs instead reads the assertion word as payload, and the failure
+/// is silent rather than loud: a 64-byte BIP-39 seed reads as 65 bytes, the master key
+/// derived from it is some other wallet's, and the proof about it still verifies.
+///
+/// The serialized form a verifier pins ([serialize_words]) **keeps** the assertion word;
+/// it is part of what the proof commits to. Only a caller consuming the outputs as
+/// values — a derivation walk — wants it removed.
+pub fn checked_payload(mut words: Words) -> Option<Words> {
+    let assertion = words.u8.pop()?;
+    (assertion == ASSERTION_TRUE).then_some(words)
+}
+
 // ---------------------------------------------------------------------------
 // Test vectors (BIP-32 vector 1, BIP-39 Trezor vector).
 // ---------------------------------------------------------------------------
