@@ -68,11 +68,10 @@ use alloc::vec::Vec;
 use zeroize::{Zeroize, Zeroizing};
 use zkboo::backend::{Backend, BackendHook, Hooked, NoHook};
 use zkboo::circuit::Circuit;
-use zkboo::crypto::{
-    Hasher, Keccak256Hasher, PseudoRandomGenerator, Seed,
-};
-use zkboo::prover::proof::ProofBuilder;
+use crate::hasher::Keccak256Hasher;
+use zkboo::crypto::{Hasher, PseudoRandomGenerator, Seed};
 use zkboo::prover::proof::collectors::ResponseDataCollector;
+use zkboo::prover::proof::{ProofBuilder, ProofOptions};
 use zkboo::prover::views::WordTriplePool;
 use zkboo_circuit_hash::CircuitHashingBackend;
 
@@ -280,8 +279,8 @@ pub fn circuit_fingerprint_hooked<C: Circuit, BH: BackendHook>(
 /// A thin wrapper over zkboo's own [ProofBuilder]: the responses outside the range
 /// are skipped with [ProofBuilder::skip_iters], which advances the seed and challenge
 /// streams past an iteration without executing the circuit. With
-/// `start = 0, end = num_iters` the emitted bytes are identical to
-/// `build_proof_custom_hooked` (locked by a psverify test).
+/// `start = 0, end = num_iters` the emitted bytes are identical to `build_proof`
+/// (locked by a psverify test).
 ///
 /// Skipping the tail and finalizing is not ceremony: [ProofBuilder::finalize] checks
 /// that every iteration was either yielded or skipped, so a range that does not add
@@ -309,12 +308,14 @@ where
         start <= end && end <= num_iters,
         "response range [{start}, {end}) out of bounds for {num_iters} responses"
     );
-    let mut builder = ProofBuilder::<H, PS, PV, S, RDC, WTP, BH>::new_with_arg_hooked(
+    let options = ProofOptions::new()
+        .with_collector_arg::<RDC>(collector_init_arg)
+        .with_hook_arg::<BH>(hook_init_arg);
+    let mut builder = ProofBuilder::<H, PS, PV, S, RDC, WTP, BH>::new(
         seed_entropy,
         challenge_entropy,
         num_iters,
-        collector_init_arg,
-        hook_init_arg,
+        options,
     );
     builder.skip_iters(start);
     let mut res_vec = Vec::with_capacity(end - start);

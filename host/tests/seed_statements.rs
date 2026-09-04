@@ -146,7 +146,7 @@ fn the_passphrase_never_reaches_the_verifier() {
     // only the lengths — cannot tell them apart, and is never given the passphrase to
     // begin with. When the salt was a public constant it was in the circuit, so it had
     // to be handed over for the circuit to be rebuilt at all.
-    use zkboo::crypto::Keccak256Hasher;
+    use proofofseed_circuits::hasher::Keccak256Hasher;
     use zkboo_circuit_hash::hash_circuit;
 
     let one = SeedCircuit {

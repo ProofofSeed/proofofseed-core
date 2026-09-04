@@ -13,9 +13,10 @@ use core::cell::RefCell;
 use std::time::Instant;
 
 use proofofseed_circuits::{master_key_circuit, public_key_circuit};
+use proofofseed_circuits::hasher::Keccak256Hasher;
 use zkboo::backend::BackendHook;
 use zkboo::circuit::Circuit;
-use zkboo::crypto::{HashPRG, Keccak256Hasher};
+use zkboo::crypto::HashPRG;
 use zkboo::prover::challenge::ChallengeBuilder;
 use zkboo::prover::views::collectors::ViewCommitmentsRelayer;
 use zkboo::prover::views::OwnedFlexibleWordTriplePool;

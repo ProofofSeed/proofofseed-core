@@ -18,11 +18,12 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use proofofseed_circuits::*;
 use std::process::ExitCode;
+use proofofseed_circuits::hasher::Keccak256Hasher;
 use zkboo::circuit::Circuit;
-use zkboo::crypto::{HashPRG, Keccak256Hasher};
-use zkboo::executor::{exec, OwnedFlexibleWordPool};
+use zkboo::crypto::HashPRG;
+use zkboo::executor::{ExecOptions, exec, OwnedFlexibleWordPool};
 use zkboo::prover::challenge::Party;
-use zkboo::prover::proof::build_proof_custom;
+use zkboo::prover::proof::{ProofOptions, build_proof};
 use zkboo::prover::proof::collectors::ResponseDataCollector;
 use zkboo::prover::challenge::ChallengeBuilder;
 use zkboo::prover::views::OwnedFlexibleWordTriplePool;
@@ -104,15 +105,20 @@ fn prover_peak_heap<C: Circuit>(circuit: &C) -> usize {
     circuit.exec(it.view_builder());
     it.finalize();
     let entropy = builder.finalize();
-    let _: Vec<()> =
-        build_proof_custom::<C, H, PS, PV, S, DiscardSink, WTP>(circuit, b"entropy", entropy, 1, ());
+    let _: Vec<()> = build_proof::<C, H, PS, PV, S, DiscardSink, WTP, _>(
+        circuit,
+        b"entropy",
+        entropy,
+        1,
+        ProofOptions::new().with_collector_arg::<DiscardSink>(()),
+    );
     PEAK.load(Ordering::Relaxed)
 }
 
 /// Executes a circuit and removes the trailing assertion word, so what is compared is the
 /// statement's payload rather than the payload plus one byte.
 fn payload<C: Circuit>(circuit: &C) -> Words {
-    checked_payload(exec::<C, WP>(circuit)).expect("assertions hold")
+    checked_payload(exec::<C, WP, _>(circuit, ExecOptions::new())).expect("assertions hold")
 }
 
 fn main() -> ExitCode {

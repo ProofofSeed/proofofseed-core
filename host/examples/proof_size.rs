@@ -23,10 +23,11 @@ use proofofseed_circuits::{
     bip39_seed_circuit, ethereum_address_circuit, hardened_child_circuit, master_key_circuit,
     normal_child_circuit, public_key_circuit,
 };
+use proofofseed_circuits::hasher::Keccak256Hasher;
 use zkboo::circuit::Circuit;
-use zkboo::crypto::{HashPRG, Keccak256Hasher};
+use zkboo::crypto::HashPRG;
 use zkboo::prover::challenge::{ChallengeBuilder, Party};
-use zkboo::prover::proof::build_proof_custom;
+use zkboo::prover::proof::{ProofOptions, build_proof};
 use zkboo::prover::proof::collectors::ResponseDataCollector;
 use zkboo::prover::views::OwnedFlexibleWordTriplePool;
 use zkboo::word::{CompositeWord, Word};
@@ -85,12 +86,12 @@ fn proof_size<C: Circuit>(circuit: &C, n: usize) -> usize {
         it.finalize();
     }
     let challenge_entropy = builder.finalize();
-    let _: Vec<()> = build_proof_custom::<C, H, PS, PV, S, CountSink, WTP>(
+    let _: Vec<()> = build_proof::<C, H, PS, PV, S, CountSink, WTP, _>(
         circuit,
         b"seed",
         challenge_entropy,
         n,
-        &total,
+        ProofOptions::new().with_collector_arg::<CountSink>(&total),
     );
     total.into_inner()
 }

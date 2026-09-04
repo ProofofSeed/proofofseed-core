@@ -14,7 +14,7 @@
 use std::fs::File;
 use std::io::{BufWriter, Write};
 
-use zkboo_ecc::montgomery::{ComputedWindowTables, Curve, WindowTables, DEFAULT_COMB_WINDOW_BITS};
+use zkboo_ecc::weierstrass::{ComputedWindowTables, Curve, WindowTables, DEFAULT_COMB_WINDOW_BITS};
 use zkboo_ecc::secp256k1::Secp256k1PM;
 
 fn main() {

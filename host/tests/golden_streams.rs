@@ -28,7 +28,7 @@ const H: u32 = 0x8000_0000;
 const BINDING: &[u8] = b"golden-fixture-binding";
 
 fn keccak_hex(data: &[u8]) -> String {
-    let mut h = zkboo::crypto::Keccak256Hasher::new();
+    let mut h = proofofseed_circuits::hasher::Keccak256Hasher::new();
     h.update(data);
     let mut out = [0u8; 32];
     h.finalize_into(&mut out);

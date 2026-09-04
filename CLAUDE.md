@@ -6,6 +6,45 @@ The shared proof-of-seed library repo: statement circuits + request/ranged proto
 
 **The consumer switch is done** (verified 2026-08-28, correcting a guide that still said it was not): `../ledger-app/app` depends on `proofofseed-circuits` by path, `../ledger-app/host/psverify` on `proofofseed-host`, and no copy of either survives in that repo — `app/src/` is device code only (UI, APDU, stack probe, heap monitor) and `psverify/src/` is a single PyO3 shim. There is one implementation of the statements, and a change here reaches the device app, the CLI and the Python package at once. The divergence the guide warned about is now only additive: this library carries `WitnessMaterial::Seed` and `::Mnemonic` for the software-wallet provers, which the app has no use for.
 
+## State as of 2026-09-04 — ported to zkboo v1.2.0
+
+zkboo was re-architected and its history rebuilt. Every published version is **yanked**; the tip is
+**v1.2.0**, whose number is *lower* than the `2.0.0` it replaces, and which is not on crates.io yet.
+Ported here and in all three consumers, all four green. `<zkboo>/MIGRATION.md` is the upstream
+record; what it meant for this repo:
+
+- **The assertion word is the circuit's own now.** `zkboo::circuit::Assertions` replaced
+  `Backend::assert_true` / `emit_assertions`, so every `exec` ends with `Assertions::output`. A
+  circuit written without that line loses the word **silently**, and a caller stripping it with
+  `checked_payload` eats a payload byte instead — which is exactly what happened to two hand-written
+  test circuits during the port, one in `host/tests/solana.rs` and one in `rust-app/src/seed.rs`.
+  Every circuit in the tree ends with the word, including the ones that assert nothing.
+- **The comb's advice is a circuit input the caller computes**, not a backend hint. The elephant
+  circuits carry a `PublicKeyAdvice`: `new` computes it from the key, `shaped` supplies only its
+  count, which is what a verifier needs. Two consequences are filed in `<zkboo>/TODO.md`: the
+  advice is key-equivalent and cannot be zeroized, and computing it services no io (a watchdog
+  hazard on the device — measured at 0.317% of a response, so ~4.8 s on the Flex against a 30–50 s
+  window; the app keepalives before it and it wants measuring on hardware).
+- **The core crate ships no concrete `Hasher`.** `zkboo::crypto::Keccak256Hasher` and the `keccak`
+  feature are gone. The ecosystem's choice now lives once, in
+  `proofofseed_circuits::hasher::Keccak256Hasher`, which the device app, the CLI and the Python
+  package all take.
+- **Fifteen entry points became six**, each taking an options value: `build_proof`, `prove`,
+  `verify`, `exec`, `build_challenge_entropy`, `ProofBuilder::new`, with `ProofOptions` /
+  `VerifyOptions` / `ExecOptions` / `ChallengeOptions`.
+- **`zkboo_ecc::montgomery` is `weierstrass`**, and its point types lost their `Curve` prefix.
+- **No proof made before v1.2.0 verifies**, because the Fiat-Shamir transcript, the view commitments
+  and the PRG are now separately domain-separated. `PROOF_FORMAT_VERSION` is still `3` — it does
+  **not** discriminate this change, so a consumer using it as a compatibility gate is not protected.
+  The streaming verifier must use `zkboo::crypto::{TAG_CHALLENGE, absorb_framed}` rather than its own
+  copy of the framing.
+
+The wire format did **not** move. The proof-byte fixture re-anchored with all nine digests changed
+and both `public_key` rows byte-identical in length, every other delta a whole number of that
+statement's own input shares. The curve statements' 1,696-byte input share is still 32 key bytes plus
+52 comb slopes of 32 bytes. So sizes, rates and the device's cost laws all carry over; the circuit
+fingerprints do not, and the current set is tabulated in `ledger-app/docs/benchmarks.md`.
+
 ## State as of 2026-08-28 (branch `watchdog-safe-fingerprinting`, 9+ commits ahead of `main`, unmerged)
 
 Three things landed together, and the first two were pre-existing faults found while making the third.

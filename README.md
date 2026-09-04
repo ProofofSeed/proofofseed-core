@@ -6,7 +6,9 @@ The shared proof-of-seed library: the ZKBoo statement circuits (BIP-32/secp256k1
 
 ## Reading a circuit's outputs
 
-Since ZKBoo 2.0.0 every circuit emits, as its **last output word**, the conjunction of the in-circuit assertions it made. It is a `u8`, so it is the last element of `Words::u8` whatever widths the payload uses — for the curve statements the payload is entirely `u64` and the `u8` section holds nothing but the assertion word.
+Every statement circuit emits, as its **last output word**, the conjunction of the in-circuit assertions it made. It is a `u8`, so it is the last element of `Words::u8` whatever widths the payload uses — for the curve statements the payload is entirely `u64` and the `u8` section holds nothing but the assertion word. A statement that asserts nothing emits the constant one, so the shape is the same across the suite.
+
+The word is the circuit's own, not the backend's: `exec` ends with `Assertions::output`, and a circuit written without that line loses the word silently, so a caller stripping it eats a payload byte instead. Any new circuit here must end the same way.
 
 **Read outputs through `proofofseed_circuits::checked_payload`, never raw.** It removes the word and returns `None` when it is false. Slicing the raw outputs takes the assertion word for payload, and the failure is silent rather than loud: a 64-byte BIP-39 seed reads as 65 bytes, and every key derived from it belongs to a different wallet.
 
@@ -28,7 +30,9 @@ Soundness default is **438 responses** (`(2/3)^438 ≤ 2^-256`, 128-bit post-qua
 
 ## Dependencies
 
-The `zkboo` crates (the underlying MPC-in-the-Head proof system) at **2.0.0**, published on crates.io and resolved to the local working trees under `<zkboo>` by the workspace's `[patch.crates-io]`.
+The `zkboo` crates (the underlying MPC-in-the-Head proof system) at **1.2.0**, resolved to the local working trees under `<zkboo>` by the workspace's `[patch.crates-io]`. That release is not on crates.io yet; every earlier published version is yanked.
+
+The proof hash is Keccak-256, and it is **ours to supply**: `zkboo` defines the `Hasher` trait and ships no concrete hash. `proofofseed_circuits::hasher::Keccak256Hasher` is where the ecosystem makes that choice, once, so the device, the CLI and the Python package cannot drift apart on it.
 
 ⚠️ A `[patch.crates-io]` entry is ignored **in silence** once the local crate's version stops satisfying the requirement, and cargo resolves the published crate instead with no warning. When the zkboo crates take a major version, every requirement here and in all three consumers has to move with them, or the graph ends up holding two incompatible copies.
 

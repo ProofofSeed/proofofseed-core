@@ -34,11 +34,12 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use proofofseed_circuits::{
     MasterKeyCircuit, SeedCircuit, bip39_salt_for, hardened_child_circuit, master_key_circuit,
 };
+use proofofseed_circuits::hasher::Keccak256Hasher;
 use zkboo::backend::BackendHook;
 use zkboo::circuit::Circuit;
-use zkboo::crypto::{HashPRG, Keccak256Hasher};
+use zkboo::crypto::HashPRG;
 use zkboo::prover::challenge::{ChallengeBuilder, Party};
-use zkboo::prover::proof::build_proof_custom_hooked;
+use zkboo::prover::proof::{ProofOptions, build_proof};
 use zkboo::prover::proof::collectors::ResponseDataCollector;
 use zkboo::prover::views::OwnedFlexibleWordTriplePool;
 use zkboo::prover::views::collectors::ViewCommitmentsRelayer;
@@ -145,13 +146,14 @@ fn depth_of<C: Circuit>(circuit: &C, num_iters: usize) -> (usize, usize) {
         iter.finalize();
     }
     let challenge_entropy = builder.finalize();
-    let _: Vec<()> = build_proof_custom_hooked::<C, H, PS, PV, S, ProbeSink, WTP, StackProbe>(
+    let _: Vec<()> = build_proof::<C, H, PS, PV, S, ProbeSink, WTP, _>(
         circuit,
         &seed_entropy,
         challenge_entropy,
         num_iters,
-        (),
-        (),
+        ProofOptions::new()
+            .with_collector_arg::<ProbeSink>(())
+            .with_hook_arg::<StackProbe>(()),
     );
     let deepest = DEEPEST.load(Ordering::Relaxed);
     let samples = SAMPLES.load(Ordering::Relaxed);

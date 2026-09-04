@@ -24,11 +24,13 @@ use proofofseed_circuits::{
     AddressCircuit, MasterKeyCircuit, NormalChildCircuit, PubKeyCircuit, SeedCircuit,
     Slip10MasterCircuit, bip39_salt_for, hardened_child_circuit, normal_child_circuit,
 };
+use proofofseed_circuits::hasher::Keccak256Hasher;
 use zkboo::circuit::Circuit;
-use zkboo::crypto::{HashPRG, Keccak256Hasher};
+use zkboo::crypto::HashPRG;
 use zkboo::prover::challenge::Party;
 use zkboo::prover::proof::collectors::ResponseDataCollector;
-use zkboo::prover::prove_custom;
+use zkboo::prover::proof::ProofOptions;
+use zkboo::prover::prove;
 use zkboo::prover::views::OwnedFlexibleWordTriplePool;
 use zkboo::word::{CompositeWord, Word};
 
@@ -133,12 +135,12 @@ const DEVICE_HEAP: usize = 13_312;
 fn peak_of<C: Circuit>(label: &str, circuit: &C) {
     PEAK.store(CURRENT.load(Ordering::Relaxed), Ordering::Relaxed);
     LIVE_AT_PEAK.store(0, Ordering::Relaxed);
-    let _: Vec<()> = prove_custom::<C, H, HashPRG<H>, HashPRG<H>, S, DiscardSink, WTP>(
+    let _: Vec<()> = prove::<C, H, HashPRG<H>, HashPRG<H>, S, DiscardSink, WTP, _>(
         circuit,
         1,
         b"device-heap-measurement",
         &[],
-        (),
+        ProofOptions::new().with_collector_arg::<DiscardSink>(()),
     );
     let peak = PEAK.load(Ordering::Relaxed);
     let live = LIVE_AT_PEAK.load(Ordering::Relaxed);

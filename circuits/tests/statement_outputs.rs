@@ -14,13 +14,13 @@ use proofofseed_circuits::{
     master_key_circuit, normal_child_circuit, public_key_circuit,
 };
 use zkboo::circuit::Circuit;
-use zkboo::executor::{OwnedFlexibleWordPool, exec};
+use zkboo::executor::{ExecOptions, OwnedFlexibleWordPool, exec};
 use zkboo::word::Words;
 
 type WP = OwnedFlexibleWordPool<usize>;
 
 fn payload<C: Circuit>(circuit: &C) -> Words {
-    checked_payload(exec::<C, WP>(circuit)).expect("assertions hold")
+    checked_payload(exec::<C, WP, _>(circuit, ExecOptions::new())).expect("assertions hold")
 }
 
 fn u8_hex(bytes: &[u8]) -> String {

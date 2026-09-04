@@ -40,11 +40,13 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use linked_list_allocator::Heap;
 use proofofseed_circuits::{MasterKeyCircuit, SeedCircuit, bip39_salt_for, hardened_child_circuit};
+use proofofseed_circuits::hasher::Keccak256Hasher;
 use zkboo::circuit::Circuit;
-use zkboo::crypto::{HashPRG, Keccak256Hasher};
+use zkboo::crypto::HashPRG;
 use zkboo::prover::challenge::Party;
 use zkboo::prover::proof::collectors::ResponseDataCollector;
-use zkboo::prover::prove_custom;
+use zkboo::prover::proof::ProofOptions;
+use zkboo::prover::prove;
 use zkboo::prover::views::OwnedFlexibleWordTriplePool;
 use zkboo::word::{CompositeWord, Word};
 
@@ -161,12 +163,12 @@ fn run<C: Circuit>(arena_bytes: usize, num_iters: usize, binding: &[u8], circuit
     }
     ARMED.store(true, Ordering::Relaxed);
     let held = ballast();
-    let _: Vec<()> = prove_custom::<C, H, HashPRG<H>, HashPRG<H>, S, DiscardSink, WTP>(
+    let _: Vec<()> = prove::<C, H, HashPRG<H>, HashPRG<H>, S, DiscardSink, WTP, _>(
         circuit,
         num_iters,
         binding,
         &[],
-        (),
+        ProofOptions::new().with_collector_arg::<DiscardSink>(()),
     );
     drop(held);
     ARMED.store(false, Ordering::Relaxed);

@@ -3,7 +3,7 @@
 //! Where the assertion word lands in a circuit's outputs, and what happens to code that
 //! does not know it is there.
 //!
-//! Since ZKBoo 2.0.0 every circuit emits, as its last output word, the conjunction of the
+//! Every statement circuit emits, as its last output word, the conjunction of the
 //! in-circuit assertions it made. It is a `u8`, so it lands at the end of `Words::u8` —
 //! including for the curve statements, whose payload is entirely `u64` and whose `u8`
 //! section therefore holds *nothing but* the assertion word. Code that slices the raw
@@ -17,13 +17,13 @@ use proofofseed_circuits::{
     serialize_words, slip10_child_circuit, slip10_master_circuit,
 };
 use zkboo::circuit::Circuit;
-use zkboo::executor::{OwnedFlexibleWordPool, exec};
+use zkboo::executor::{ExecOptions, OwnedFlexibleWordPool, exec};
 use zkboo::word::Words;
 
 type WP = OwnedFlexibleWordPool<usize>;
 
 fn run<C: Circuit>(circuit: &C) -> Words {
-    exec::<C, WP>(circuit)
+    exec::<C, WP, _>(circuit, ExecOptions::new())
 }
 
 #[test]

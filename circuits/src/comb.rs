@@ -24,7 +24,7 @@
 //! the reconstructed values against the computed ones, and the fingerprint of the
 //! flash-sourced circuit against the computed-sourced one.
 
-use zkboo_ecc::montgomery::{ComputedWindowTables, Curve, WindowTables, DEFAULT_COMB_WINDOW_BITS};
+use zkboo_ecc::weierstrass::{ComputedWindowTables, Curve, WindowTables, DEFAULT_COMB_WINDOW_BITS};
 use zkboo_ecc::secp256k1::Secp256k1PM;
 
 /// A source of secp256k1 fixed-base comb window tables.
@@ -57,7 +57,7 @@ mod flash {
     use alloc::vec::Vec;
 
     use zkboo::word::CompositeWord;
-    use zkboo_ecc::montgomery::WindowTables;
+    use zkboo_ecc::weierstrass::WindowTables;
     use zkboo_ecc::secp256k1::{Secp256k1FieldPM, Secp256k1PM};
     use zkboo_modular::montgomery::MontgomeryWord;
 

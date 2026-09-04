@@ -19,7 +19,7 @@ use proofofseed_circuits::{
 use proofofseed_host::harness::{exec_words, gen_stream, output_of};
 use proofofseed_host::{expected_output, verify};
 use zkboo::backend::{Backend, Frontend};
-use zkboo::circuit::Circuit;
+use zkboo::circuit::{Assertions, Circuit};
 
 const H: u32 = 0x8000_0000;
 const BIP32_FAMILY: u8 = 0;
@@ -128,6 +128,9 @@ impl Circuit for PubkeyOf {
         zkboo_bip32::ed25519_public_key(frontend, &key)
             .into_iter()
             .for_each(|w| frontend.output(w));
+        // The suite's circuits all end with the assertion word, and [payload] strips it;
+        // a circuit that omitted it would have its last payload byte eaten instead.
+        Assertions::new().output(frontend);
     }
 }
 

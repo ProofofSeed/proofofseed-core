@@ -36,17 +36,41 @@
 # other seven rows did not move — including `raw/master_key/n2`, the control, and the
 # hardened-child rows, whose statement shares none of the curve machinery.
 #
+#
+# Re-anchored 2026-09-04 against zkboo v1.2.0. All nine digests moved and there is no row
+# left that could not have: v1.2.0 domain-separates the Fiat-Shamir transcript, the view
+# commitments and the pseudo-random generator, so every party seed, every commitment and
+# every challenge is drawn differently. `raw/master_key/n2` moved with the rest, which
+# costs this fixture its control row for this one change; what stands in for it is the
+# lengths, which say something a digest cannot.
+#
+# The lengths say the wire format did not move. Every delta is a whole number of input
+# shares of the statement's own witness, which is the bimodality: a response carries
+# party 2's input share only for two of the three challenges, and the challenges are
+# exactly what a new transcript re-draws.
+#   - `raw/master_key/n2` +32 = two responses gaining the 16-byte seed witness.
+#   - `raw/bip39-r2/n2` +214 = two responses gaining 107 B, the 93-byte mnemonic plus the
+#     14-byte salt.
+#   - the four `hardened_child` rows +64, +32, +32, +0: two more responses of the four
+#     carry the 32-byte parent key, and the three segments still sum to the full row.
+#   - `derived/slip10_child/n4/full` +32, likewise one 32-byte parent key.
+#   - both `raw/public_key` rows are byte-identical in length. That is the load-bearing
+#     one: v1.2.0 moved the comb's advice out of a backend hint and into circuit inputs
+#     the caller computes, and had that changed what goes on the wire these rows would
+#     have moved. The curve statements' 1,696-byte input share is still the 32-byte key
+#     plus 52 comb slopes of 32 bytes.
+#
 # Earlier history: first recorded at ledger-app 86a4656; re-recorded 2026-08-21 at
 # ledger-app 130cb2e when the deterministic-entropy transcript began absorbing zkboo's
 # PROOF_FORMAT_VERSION (which moved the `derived/` rows and left the `raw/` ones alone);
 # `raw/bip39-r2/n2` re-anchored 2026-08-22 when the BIP-39 PBKDF2 salt became witness
 # instead of a public circuit constant, at one input-share byte per salt byte.
-raw/master_key/n2 102594 446f846c799db0bfd14f1826d4cdda0811aa6b9b1691e958e8e3c765be63792a
-raw/bip39-r2/n2 153794 a0c478a4eafed64074f8adbb33c317d3d1b28866956fa4f38cfe4889eff91cd7
-derived/hardened_child/n4/full 206636 19e9e1abee6bd6f951f1fdf8853795ca3199ea13c0463500e89e517885a02e1b
-derived/hardened_child/n4/seg0-2 103318 b7d2d4aa0b359baf1ebc8b588598034a9ca8bcfc8e59bd73b224ac9706277584
-derived/hardened_child/n4/seg2-3 51659 3068869d42ba661e49744ce5a39fabca827a7e882fa31f206aa6e4c2188204b9
-derived/hardened_child/n4/seg3-4 51659 f7faef8c34e2c3f9ebb807d67dbe07767ccbdd0c19a07b6ceeedb4fafbef6923
-derived/slip10_child/n4/full 205220 758d387ed3d6d82a3201a1ffe661c8b50c8e93b51834ff6e1154b43bb6b7ec8a
-raw/public_key/n2/full 5808536 e6d65f55ad9e84c0219c231288558cc9f45a020bf14781e83a24029725b44c6d
-raw/public_key/n2/seg1-2 2904268 9ccdb651480b300291f31624f4cf0d5dfd329497b4e53098e45931ddfe71403f
+raw/master_key/n2 102626 2bbd5561f2451974ee8587bc1f8b1aa758b222e88c024bd5abd9fcb4e039d90f
+raw/bip39-r2/n2 154008 14f8b31363699d4a448d56728309db255c9db454cc0ce9b51f13f0ce988fcd29
+derived/hardened_child/n4/full 206700 306e6e762f89034370cd455d662174b2cbe55e894e067c450f5fabd85f30eba7
+derived/hardened_child/n4/seg0-2 103350 8b2c1f654f90bf3bef13d3c5b2373dc4f2c9e333298b22caecec0eddd362cd1d
+derived/hardened_child/n4/seg2-3 51691 bb28a2d637da5f35d318247d15507be6b89efbfc94ed702639e8b5a5118a46a4
+derived/hardened_child/n4/seg3-4 51659 93ea0f4dfb8f4d84b694710a293e9e83c727afab0c9030effd4a3df8b04d8a1e
+derived/slip10_child/n4/full 205252 bdaf7742de6cd70e23976e671d4796737b65f1fc7acf6f155217ccb978344a8b
+raw/public_key/n2/full 5808536 ab712170e6aaa8dad348ae48dcf40e8844dad1835a5f44aa199ba44f5ab361be
+raw/public_key/n2/seg1-2 2904268 02f9ab181576fc28c5254c67e7de591cf7feffcb5f0494c20f918deaed414886

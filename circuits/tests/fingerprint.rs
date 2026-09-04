@@ -15,7 +15,7 @@ use proofofseed_circuits::{
     BIP39_SEED, ETH_ADDRESS, HARDENED_CHILD, HardenedChildCircuit, MASTER_KEY, NORMAL_CHILD,
     PUBLIC_KEY, statement_fingerprint,
 };
-use zkboo::crypto::Keccak256Hasher;
+use proofofseed_circuits::hasher::Keccak256Hasher;
 use zkboo_circuit_hash::hash_circuit;
 
 const H: u32 = 0x8000_0000;

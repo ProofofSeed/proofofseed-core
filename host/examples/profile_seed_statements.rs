@@ -8,8 +8,8 @@
 //! Run: `cargo run --release -p zkboo-bip32 --example profile_seed_statements`
 
 use zkboo::backend::{Backend, Frontend};
-use zkboo::circuit::Circuit;
-use zkboo::executor::{exec, OwnedFlexibleWordPool};
+use zkboo::circuit::{Assertions, Circuit};
+use zkboo::executor::{ExecOptions, exec, OwnedFlexibleWordPool};
 use zkboo_bip32::{hardened_child_key, master_key};
 use zkboo_profiling::{profile, ProfilingData};
 
@@ -27,6 +27,7 @@ impl Circuit for MasterKeyCircuit {
         let (il, ir) = master_key(frontend.allocator(), seed);
         il.into_iter().for_each(|w| frontend.output(w));
         ir.into_iter().for_each(|w| frontend.output(w));
+        Assertions::new().output(frontend);
     }
 }
 
@@ -51,6 +52,7 @@ impl Circuit for HardenedChildCircuit {
         let (child, cc_out) = hardened_child_key(frontend.allocator(), cc, pk, self.index);
         frontend.output(child);
         cc_out.into_iter().for_each(|w| frontend.output(w));
+        Assertions::new().output(frontend);
     }
 }
 
@@ -102,7 +104,7 @@ fn main() {
     let master = MasterKeyCircuit {
         seed: (0u8..16).collect(),
     };
-    let out_u8 = exec::<MasterKeyCircuit, OwnedFlexibleWordPool<u8>>(&master).u8;
+    let out_u8 = exec::<MasterKeyCircuit, OwnedFlexibleWordPool<u8>, _>(&master, ExecOptions::new()).u8;
     let il = out_u8[..32].iter().map(|b| format!("{b:02x}")).collect::<String>();
     let expect_il = "e8f32e723decf4051aefac8e2c93c9c5b214313817cdb01a1494b917c8436b35";
     println!("exec<RC=u8> master IL = {il}");
