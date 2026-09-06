@@ -12,8 +12,8 @@
 use proofofseed_circuits::comb::{ComputedComb, FlashComb};
 use proofofseed_circuits::request::Family::{Bip32Secp256k1 as B32, Slip10Ed25519 as S10};
 use proofofseed_circuits::{
-    BIP39_SEED, ETH_ADDRESS, HARDENED_CHILD, HardenedChildCircuit, MASTER_KEY, NORMAL_CHILD,
-    PUBLIC_KEY, statement_fingerprint,
+    AddressCircuit, BIP39_SEED, ETH_ADDRESS, HARDENED_CHILD, HardenedChildCircuit, MASTER_KEY,
+    NORMAL_CHILD, NormalChildCircuit, PUBLIC_KEY, PubKeyCircuit, statement_fingerprint,
 };
 use proofofseed_circuits::hasher::Keccak256Hasher;
 use zkboo_circuit_hash::hash_circuit;
@@ -88,6 +88,40 @@ fn the_witness_does_not_move_the_fingerprint() {
 
 fn alloc_cc(b: u8) -> Vec<u8> {
     vec![b; 32]
+}
+
+#[test]
+fn a_prover_circuit_and_a_verifier_circuit_are_the_same_circuit() {
+    // The curve statements come in two constructions: `new`, which hands the fixed-base
+    // comb the scalar to follow on the host, and `shaped`, which hands it none. They must
+    // build the same circuit gate for gate — the whole protocol is a prover and a verifier
+    // agreeing on one structure — so the only thing the scalar decides is where a slope's
+    // *value* comes from. A verifier replaying a view discards those values as it discards
+    // every other input value.
+    let key = vec![0x5Au8; 32];
+    assert_eq!(
+        hash_circuit::<_, Keccak256Hasher>(&PubKeyCircuit::<ComputedComb>::new(key.clone())),
+        hash_circuit::<_, Keccak256Hasher>(&PubKeyCircuit::<ComputedComb>::shaped(key.clone())),
+        "public key",
+    );
+    assert_eq!(
+        hash_circuit::<_, Keccak256Hasher>(&AddressCircuit::<ComputedComb>::new(key.clone())),
+        hash_circuit::<_, Keccak256Hasher>(&AddressCircuit::<ComputedComb>::shaped(key.clone())),
+        "ethereum address",
+    );
+    assert_eq!(
+        hash_circuit::<_, Keccak256Hasher>(&NormalChildCircuit::<ComputedComb>::new(
+            alloc_cc(9),
+            key.clone(),
+            1,
+        )),
+        hash_circuit::<_, Keccak256Hasher>(&NormalChildCircuit::<ComputedComb>::shaped(
+            alloc_cc(9),
+            key,
+            1,
+        )),
+        "normal child",
+    );
 }
 
 #[test]

@@ -35,7 +35,7 @@
 //! chain code, the binding, the witness itself — and, through
 //! [deterministic_seed_entropy], the circuit's structural fingerprint (an app
 //! update that changes a circuit, e.g. a gate-level optimisation, changes the
-//! commitments too), [zkboo::PROOF_FORMAT_VERSION] (a change to the emitted response
+//! commitments too), [zkboo::PROOF_FORMAT_ID] (a change to the emitted response
 //! bytes or the commitment preimages is invisible to a circuit fingerprint but moves
 //! every commitment, hence the challenge) and [DETERMINISTIC_ENTROPY_VERSION] (this
 //! transcript's own layout). The response range itself is deliberately *not*
@@ -81,11 +81,15 @@ use zkboo_circuit_hash::CircuitHashingBackend;
 /// never collide.
 ///
 /// This no longer has to track the proof *format*: the transcript absorbs
-/// [zkboo::PROOF_FORMAT_VERSION] directly, so a change to the emitted response bytes
+/// [zkboo::PROOF_FORMAT_ID] directly, so a change to the emitted response bytes
 /// or the commitment preimages moves the entropy mechanically, whether or not anyone
 /// remembers to touch this constant. That coupling is what the format constant exists
 /// for, and hand-tracking it here was the previous arrangement (version `1`).
-pub const DETERMINISTIC_ENTROPY_VERSION: u32 = 2;
+///
+/// Version `3` absorbs that identity as zkboo's 32-byte [zkboo::PROOF_FORMAT_ID] in
+/// place of the four-byte counter it retired — a change to this transcript's layout,
+/// which is exactly what this constant is for.
+pub const DETERMINISTIC_ENTROPY_VERSION: u32 = 3;
 
 /// Absorbs a length-prefixed byte string.
 fn absorb_bytes(h: &mut Keccak256Hasher, data: &[u8]) {
@@ -177,7 +181,7 @@ pub fn request_transcript_digest(
     let mut h = Keccak256Hasher::new();
     absorb_bytes(&mut h, b"ProofofSeed/ranged-prover-entropy/request/v1");
     h.update(&DETERMINISTIC_ENTROPY_VERSION.to_be_bytes());
-    h.update(&zkboo::PROOF_FORMAT_VERSION.to_be_bytes());
+    h.update(&zkboo::PROOF_FORMAT_ID);
     h.update(&[statement, req.family as u8]);
     h.update(&(req.num_iters as u16).to_be_bytes());
     h.update(&(req.rounds as u16).to_be_bytes());

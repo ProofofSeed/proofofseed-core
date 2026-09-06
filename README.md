@@ -8,7 +8,7 @@ The shared proof-of-seed library: the ZKBoo statement circuits (BIP-32/secp256k1
 
 Every statement circuit emits, as its **last output word**, the conjunction of the in-circuit assertions it made. It is a `u8`, so it is the last element of `Words::u8` whatever widths the payload uses — for the curve statements the payload is entirely `u64` and the `u8` section holds nothing but the assertion word. A statement that asserts nothing emits the constant one, so the shape is the same across the suite.
 
-The word is the circuit's own, not the backend's: `exec` ends with `Assertions::output`, and a circuit written without that line loses the word silently, so a caller stripping it eats a payload byte instead. Any new circuit here must end the same way.
+The word is the circuit's own, not the backend's, and **the uniformity is this suite's discipline rather than the library's**: zkboo emits the word only where a circuit opens an `Assertions::scope`, so a circuit that asserts nothing has to open an empty one — `assert_nothing(frontend)` — or lose the word silently and leave a caller stripping it to eat a payload byte instead. Every `exec` here ends in a scope, and any new circuit must too. `circuits/tests/assertion_word.rs` is what makes forgetting go red.
 
 **Read outputs through `proofofseed_circuits::checked_payload`, never raw.** It removes the word and returns `None` when it is false. Slicing the raw outputs takes the assertion word for payload, and the failure is silent rather than loud: a 64-byte BIP-39 seed reads as 65 bytes, and every key derived from it belongs to a different wallet.
 

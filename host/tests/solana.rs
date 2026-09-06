@@ -11,6 +11,7 @@
 //! wrong-binding / non-hardened-index refusals, and the cross-family negatives: a
 //! proof made in one family never verifies in the other, in either direction.
 
+use proofofseed_circuits::assert_nothing;
 use proofofseed_circuits::{
     EXPECTED_SLIP10_CHILD, EXPECTED_SLIP10_MASTER, HARDENED_CHILD, MASTER_KEY, PUBLIC_KEY,
     SeedCircuit, Slip10ChildCircuit, Slip10MasterCircuit, hardened_child_circuit,
@@ -19,7 +20,7 @@ use proofofseed_circuits::{
 use proofofseed_host::harness::{exec_words, gen_stream, output_of};
 use proofofseed_host::{expected_output, verify};
 use zkboo::backend::{Backend, Frontend};
-use zkboo::circuit::{Assertions, Circuit};
+use zkboo::circuit::Circuit;
 
 const H: u32 = 0x8000_0000;
 const BIP32_FAMILY: u8 = 0;
@@ -130,7 +131,7 @@ impl Circuit for PubkeyOf {
             .for_each(|w| frontend.output(w));
         // The suite's circuits all end with the assertion word, and [payload] strips it;
         // a circuit that omitted it would have its last payload byte eaten instead.
-        Assertions::new().output(frontend);
+        assert_nothing(frontend);
     }
 }
 

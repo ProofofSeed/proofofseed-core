@@ -12,10 +12,9 @@
 use proofofseed_circuits::bip39_seed_circuit;
 use zkboo::backend::{Backend, Frontend};
 use zkboo::circuit::{Assertions, Circuit};
-use zkboo::word::CompositeWord;
 use zkboo_bip32::{
-    PublicKeyAdvice, TaprootAdvice, be_bytes_to_word, ed25519_public_key, p2sh_p2wpkh_payload,
-    public_key_advice, pubkey_hash160, taproot_output_key,
+    be_bytes_to_word, ed25519_public_key, p2sh_p2wpkh_payload, pubkey_hash160,
+    taproot_output_key,
 };
 use zkboo_profiling::{ProfilingData, profile};
 
@@ -25,64 +24,57 @@ type S = [u8; 32];
 /// A fixed nonzero witness; sizes are data-oblivious, so any value profiles alike.
 const KEY: [u8; 32] = [0x5A; 32];
 
-/// [KEY] as the scalar the comb takes.
-fn key_scalar() -> CompositeWord<u64, 4> {
-    CompositeWord::from_be_bytes(core::array::from_fn(|i| core::array::from_fn(|j| KEY[8 * i + j])))
-}
-
-struct PubkeyHash160 {
-    advice: PublicKeyAdvice,
-}
+/// Every comb here is handed `None` rather than a scalar to follow: the profiling
+/// backend discards input values, so the host mirror would compute slopes nothing
+/// reads. The gate counts these figures come from are the same either way.
+struct PubkeyHash160;
 impl Circuit for PubkeyHash160 {
     fn exec<B: Backend>(&self, frontend: &Frontend<B>) {
-        let bytes: [_; 32] = core::array::from_fn(|i| frontend.input(KEY[i]));
-        let scalar = be_bytes_to_word(&bytes);
-        let mut assertions = Assertions::new();
-        pubkey_hash160(frontend, scalar, &self.advice, &mut assertions)
-            .into_iter()
-            .for_each(|w| frontend.output(w));
-        assertions.output(frontend);
+        Assertions::scope(frontend, |assertions| {
+            let bytes: [_; 32] = core::array::from_fn(|i| frontend.input(KEY[i]));
+            let scalar = be_bytes_to_word(&bytes);
+            pubkey_hash160(frontend, scalar, None, assertions)
+                .into_iter()
+                .for_each(|w| frontend.output(w));
+        });
     }
 }
 
-struct P2shP2wpkhPayload {
-    advice: PublicKeyAdvice,
-}
+struct P2shP2wpkhPayload;
 impl Circuit for P2shP2wpkhPayload {
     fn exec<B: Backend>(&self, frontend: &Frontend<B>) {
-        let bytes: [_; 32] = core::array::from_fn(|i| frontend.input(KEY[i]));
-        let scalar = be_bytes_to_word(&bytes);
-        let mut assertions = Assertions::new();
-        p2sh_p2wpkh_payload(frontend, scalar, &self.advice, &mut assertions)
-            .into_iter()
-            .for_each(|w| frontend.output(w));
-        assertions.output(frontend);
+        Assertions::scope(frontend, |assertions| {
+            let bytes: [_; 32] = core::array::from_fn(|i| frontend.input(KEY[i]));
+            let scalar = be_bytes_to_word(&bytes);
+            p2sh_p2wpkh_payload(frontend, scalar, None, assertions)
+                .into_iter()
+                .for_each(|w| frontend.output(w));
+        });
     }
 }
 
-struct TaprootOutputKey {
-    advice: TaprootAdvice,
-}
+struct TaprootOutputKey;
 impl Circuit for TaprootOutputKey {
     fn exec<B: Backend>(&self, frontend: &Frontend<B>) {
-        let bytes: [_; 32] = core::array::from_fn(|i| frontend.input(KEY[i]));
-        let scalar = be_bytes_to_word(&bytes);
-        let mut assertions = Assertions::new();
-        taproot_output_key(frontend, scalar, &self.advice, &mut assertions)
-            .into_iter()
-            .for_each(|w| frontend.output(w));
-        assertions.output(frontend);
+        Assertions::scope(frontend, |assertions| {
+            let bytes: [_; 32] = core::array::from_fn(|i| frontend.input(KEY[i]));
+            let scalar = be_bytes_to_word(&bytes);
+            taproot_output_key(frontend, scalar, None, None, assertions)
+                .into_iter()
+                .for_each(|w| frontend.output(w));
+        });
     }
 }
 
 struct Ed25519Pubkey;
 impl Circuit for Ed25519Pubkey {
     fn exec<B: Backend>(&self, frontend: &Frontend<B>) {
-        let key: [_; 32] = core::array::from_fn(|i| frontend.input(KEY[i]));
-        ed25519_public_key(frontend, &key)
-            .into_iter()
-            .for_each(|w| frontend.output(w));
-        Assertions::new().output(frontend);
+        Assertions::scope(frontend, |_| {
+            let key: [_; 32] = core::array::from_fn(|i| frontend.input(KEY[i]));
+            ed25519_public_key(frontend, &key)
+                .into_iter()
+                .for_each(|w| frontend.output(w));
+        });
     }
 }
 
@@ -100,19 +92,9 @@ fn main() {
         "statement                            bytes/resp        proof @438     prover mem\n"
     );
     println!("Bitcoin / Solana address bindings (elephants):");
-    let advice = public_key_advice(key_scalar());
-    report(
-        "pubkey_hash160 (P2PKH/P2WPKH)",
-        &profile(&PubkeyHash160 { advice: advice.clone() }),
-    );
-    report(
-        "p2sh_p2wpkh_payload",
-        &profile(&P2shP2wpkhPayload { advice }),
-    );
-    report(
-        "taproot_output_key (P2TR)",
-        &profile(&TaprootOutputKey { advice: TaprootAdvice::compute(key_scalar()) }),
-    );
+    report("pubkey_hash160 (P2PKH/P2WPKH)", &profile(&PubkeyHash160));
+    report("p2sh_p2wpkh_payload", &profile(&P2shP2wpkhPayload));
+    report("taproot_output_key (P2TR)", &profile(&TaprootOutputKey));
     report("ed25519 public key (Solana addr)", &profile(&Ed25519Pubkey));
     println!("\nBIP-39 seed derivation by round count:");
     for r in [1usize, 2, 8, 64, 2048] {

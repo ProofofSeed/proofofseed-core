@@ -8,7 +8,8 @@
 //! Run: `cargo run --release -p zkboo-bip32 --example profile_seed_statements`
 
 use zkboo::backend::{Backend, Frontend};
-use zkboo::circuit::{Assertions, Circuit};
+use proofofseed_circuits::assert_nothing;
+use zkboo::circuit::Circuit;
 use zkboo::executor::{ExecOptions, exec, OwnedFlexibleWordPool};
 use zkboo_bip32::{hardened_child_key, master_key};
 use zkboo_profiling::{profile, ProfilingData};
@@ -27,7 +28,7 @@ impl Circuit for MasterKeyCircuit {
         let (il, ir) = master_key(frontend.allocator(), seed);
         il.into_iter().for_each(|w| frontend.output(w));
         ir.into_iter().for_each(|w| frontend.output(w));
-        Assertions::new().output(frontend);
+        assert_nothing(frontend);
     }
 }
 
@@ -52,7 +53,7 @@ impl Circuit for HardenedChildCircuit {
         let (child, cc_out) = hardened_child_key(frontend.allocator(), cc, pk, self.index);
         frontend.output(child);
         cc_out.into_iter().for_each(|w| frontend.output(w));
-        Assertions::new().output(frontend);
+        assert_nothing(frontend);
     }
 }
 

@@ -60,6 +60,32 @@
 #     have moved. The curve statements' 1,696-byte input share is still the 32-byte key
 #     plus 52 comb slopes of 32 bytes.
 #
+# Re-anchored 2026-09-06 against zkboo's assertion/advice/format-identity release. Five
+# rows moved and four did not, and the split is the whole finding.
+#
+# What changed upstream: the comb's advice objects are deleted — the comb now takes the
+# scalar it multiplies by and follows it on the host, one window at a time, inside circuit
+# execution — and `PROOF_FORMAT_VERSION` is replaced by `PROOF_FORMAT_ID`, a 32-byte digest
+# of a canonical reference proof. This repository's entropy transcript absorbs the new
+# constant in place of the old one, which is a change to the transcript's own layout, so
+# `DETERMINISTIC_ENTROPY_VERSION` goes 2 -> 3.
+#
+#   - The five `derived/` rows moved, because their prover entropy is derived from that
+#     transcript and the transcript now absorbs 32 different bytes under a new version.
+#     Lengths: `hardened_child` full +32 and seg0-2 +32, seg2-3 and seg3-4 unchanged, so
+#     one more of the four responses carries the 32-byte parent key and the three segments
+#     still sum to the full row; `slip10_child` +32, likewise one parent key. Bimodality
+#     re-rolled by different entropy, not a format change.
+#   - The four `raw/` rows are byte-identical, digest and length. That is what the control
+#     row lost in the previous re-anchor, recovered: their entropy does not go through the
+#     transcript, so if the proof bytes had moved they would have moved. Both
+#     `raw/public_key` rows are among them, which is the load-bearing pair — the advice
+#     rework is entirely a curve-statement change, and it put not one byte differently on
+#     the wire.
+#
+# Independently: all eight circuit fingerprints are unchanged across the same release
+# (`ledger-app/docs/benchmarks.md`), so the circuits are the same gates in the same order.
+#
 # Earlier history: first recorded at ledger-app 86a4656; re-recorded 2026-08-21 at
 # ledger-app 130cb2e when the deterministic-entropy transcript began absorbing zkboo's
 # PROOF_FORMAT_VERSION (which moved the `derived/` rows and left the `raw/` ones alone);
@@ -67,10 +93,10 @@
 # instead of a public circuit constant, at one input-share byte per salt byte.
 raw/master_key/n2 102626 2bbd5561f2451974ee8587bc1f8b1aa758b222e88c024bd5abd9fcb4e039d90f
 raw/bip39-r2/n2 154008 14f8b31363699d4a448d56728309db255c9db454cc0ce9b51f13f0ce988fcd29
-derived/hardened_child/n4/full 206700 306e6e762f89034370cd455d662174b2cbe55e894e067c450f5fabd85f30eba7
-derived/hardened_child/n4/seg0-2 103350 8b2c1f654f90bf3bef13d3c5b2373dc4f2c9e333298b22caecec0eddd362cd1d
-derived/hardened_child/n4/seg2-3 51691 bb28a2d637da5f35d318247d15507be6b89efbfc94ed702639e8b5a5118a46a4
-derived/hardened_child/n4/seg3-4 51659 93ea0f4dfb8f4d84b694710a293e9e83c727afab0c9030effd4a3df8b04d8a1e
-derived/slip10_child/n4/full 205252 bdaf7742de6cd70e23976e671d4796737b65f1fc7acf6f155217ccb978344a8b
+derived/hardened_child/n4/full 206732 e83b96c6e5b3ee89c197e604372609c430719037e1a9cb39aa9dcf1f7e843459
+derived/hardened_child/n4/seg0-2 103382 20072981302e18328920068323ad86efe3080b28602c054266579e2bdc2e560c
+derived/hardened_child/n4/seg2-3 51691 eac64ec8685fb3371998d030844207c75d434f477e74afce0422fe96e62ff7fe
+derived/hardened_child/n4/seg3-4 51659 d395e3fbf6785d721308795c5443070d16ac9449629949f7659631809a56c1fc
+derived/slip10_child/n4/full 205284 1a8a951100e188c7893d409114805a9e7208e723a4842c09b0761356d8f1a642
 raw/public_key/n2/full 5808536 ab712170e6aaa8dad348ae48dcf40e8844dad1835a5f44aa199ba44f5ab361be
 raw/public_key/n2/seg1-2 2904268 02f9ab181576fc28c5254c67e7de591cf7feffcb5f0494c20f918deaed414886

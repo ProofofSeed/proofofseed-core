@@ -10,9 +10,10 @@
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use proofofseed_circuits::assert_nothing;
 use proofofseed_circuits::hasher::Keccak256Hasher;
 use zkboo::backend::{Backend, Frontend};
-use zkboo::circuit::{Assertions, Circuit};
+use zkboo::circuit::Circuit;
 use zkboo::crypto::HashPRG;
 use zkboo::prover::challenge::Party;
 use zkboo::prover::proof::collectors::ResponseDataCollector;
@@ -65,7 +66,7 @@ impl Circuit for MasterKeyCircuit {
         let (il, ir) = master_key(frontend.allocator(), seed);
         il.into_iter().for_each(|w| frontend.output(w));
         ir.into_iter().for_each(|w| frontend.output(w));
-        Assertions::new().output(frontend);
+        assert_nothing(frontend);
     }
 }
 

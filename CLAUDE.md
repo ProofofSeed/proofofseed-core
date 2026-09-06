@@ -6,6 +6,50 @@ The shared proof-of-seed library repo: statement circuits + request/ranged proto
 
 **The consumer switch is done** (verified 2026-08-28, correcting a guide that still said it was not): `../ledger-app/app` depends on `proofofseed-circuits` by path, `../ledger-app/host/psverify` on `proofofseed-host`, and no copy of either survives in that repo — `app/src/` is device code only (UI, APDU, stack probe, heap monitor) and `psverify/src/` is a single PyO3 shim. There is one implementation of the statements, and a change here reaches the device app, the CLI and the Python package at once. The divergence the guide warned about is now only additive: this library carries `WitnessMaterial::Seed` and `::Mnemonic` for the software-wallet provers, which the app has no use for.
 
+## State as of 2026-09-06 — the advice is gone and the format has an identity
+
+zkboo carried out the four requirements this repo filed in `<zkboo>/TODO-ASSERTIONS-HINTS.md`.
+Ported here and in all three consumers, all four green. The upstream record is
+`<zkboo>/MIGRATION-NEXT.md` and `<zkboo>/DESIGN-ASSERTIONS-HINTS.md`. Three things changed:
+
+- **`PROOF_FORMAT_VERSION` is replaced by `PROOF_FORMAT_ID`**, a `[u8; 32]` that *is* the digest of
+  a canonical reference proof, so re-pinning it and announcing the change are one edit. The
+  entropy transcript in `circuits/src/ranged.rs` absorbs it in place of the counter, which is a
+  change to that transcript's own layout, so `DETERMINISTIC_ENTROPY_VERSION` goes **2 → 3**.
+- **An assertion accumulator comes only from `Assertions::scope`**, which emits the flag when its
+  body returns, so "asserted but never emitted" has no spelling. zkboo declined to make the flag
+  universal: **a circuit that opens no scope emits no word.** This suite still wants a uniform
+  output shape, because `checked_payload` strips the word without knowing which statements assert,
+  so **every circuit here ends in a scope** and the ones with nothing to assert end in
+  `assert_nothing`. That uniformity is now this repo's discipline, not the library's — a new
+  circuit that forgets it silently loses a payload byte.
+- **The comb advice objects are deleted.** `PubKeyCircuit`, `AddressCircuit` and
+  `NormalChildCircuit` hold a `mirror_scalar: bool` instead of a `PublicKeyAdvice`; `new` sets it
+  and `shaped` clears it, and `exec` passes `Some(scalar_of(..))` or `None`. Nothing
+  key-equivalent is held for the proof any more, and the arithmetic runs inside `exec` under the
+  caller's `BackendHook` — so **both device measurements this repo was owing are withdrawn**, and
+  the ledger app's three pre-circuit keepalives are removed.
+
+**Nothing about the circuits moved, and that is measured twice over.** All eight statement
+fingerprints are byte-identical (`proofofseed-host --example statement_fingerprints`, and the table
+in `../ledger-app/docs/benchmarks.md`), and the proof-byte fixture's four `raw/` rows are identical
+in length *and* digest — both `public_key` rows among them. Only the five `derived/` rows moved,
+which is exactly what an entropy-transcript change should do and nothing else. Sizes, rates and the
+device cost laws carry over untouched.
+
+⚠️ What it trades: the heap loses the 1,664 B advice object and the **stack gains a known 224 B**
+(`size_of::<CombMirror<u64, 4, Secp256k1PM>>()`, niche-packed so the verifier's `None` path costs the
+same). On the device a heap shortfall reboots and a stack shortfall wipes, so check that 224 B
+against the curve statements' measured high-water rather than re-reading the depth. And the mirror
+runs once per circuit execution rather than once per proof (876 against one at 438 responses), which
+zkboo measures at **+0.33% to +0.50%** of prover wall clock — a **host** figure at window width 5
+over precomputed tables, on arithmetic whose long dependent 256-bit multiply-reduce chain is the
+shape most likely to scale differently on a 32-bit core. Do not restate the per-response law from it.
+
+The `new`/`shaped` fingerprint invariant is pinned at both layers: ours covers whole statements
+(`circuits/tests/fingerprint.rs`), zkboo's fails first and localises to the comb
+(`zkboo-ecc/tests/test_comb_fingerprint.rs`, `zkboo-bip32/tests/test_verifier_view.rs`).
+
 ## State as of 2026-09-04 — ported to zkboo v1.2.0
 
 zkboo was re-architected and its history rebuilt. Every published version is **yanked**; the tip is

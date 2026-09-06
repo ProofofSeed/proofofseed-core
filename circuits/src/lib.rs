@@ -28,9 +28,8 @@ use zkboo::circuit::{Assertions, Circuit};
 use zkboo::word::{CompositeWord, Words};
 use zkboo_bip32::{
     be_bytes_to_word, bip39_seed_with_salt_words, ethereum_address_with_tables,
-    hardened_child_key, master_key,
-    normal_child_key_with_tables, public_key_advice_shape, public_key_advice_with_tables,
-    public_key_affine_with_tables, slip10_ed25519_child, slip10_ed25519_master, PublicKeyAdvice,
+    hardened_child_key, master_key, normal_child_key_with_tables,
+    public_key_affine_with_tables, slip10_ed25519_child, slip10_ed25519_master,
     HARDENED_OFFSET,
 };
 use zkboo_modular::montgomery::MontgomeryFrontendIO;
@@ -75,9 +74,13 @@ pub const ASSERTION_TRUE: u8 = 1;
 /// Every statement circuit here emits, as its **last** output word, the conjunction of
 /// the in-circuit assertions it made (`zkboo::circuit::Assertions`). That word is a
 /// `u8`, so it is the last element of `Words::u8` whatever widths the payload itself
-/// uses — including for the curve statements, whose payload is entirely `u64`. A
-/// statement that asserts nothing still emits it, as the constant one, so the shape is
-/// uniform across the suite and a consumer never has to know which statements assert.
+/// uses — including for the curve statements, whose payload is entirely `u64`.
+///
+/// zkboo emits the word only where a circuit opens an assertion scope, so the uniform
+/// shape this function relies on is **the suite's own discipline, not the library's**:
+/// a statement that asserts nothing ends in [assert_nothing] and emits the constant
+/// one, and a new circuit that forgets to will lose a payload byte here. Uniformity is
+/// what lets a consumer strip the word without knowing which statements assert.
 ///
 /// Returns `None` when the word is not [ASSERTION_TRUE]: the execution's assertions did
 /// not hold, and what remains is not a derivation result. A secp256k1 scalar of zero is
@@ -138,15 +141,15 @@ fn scalar_of(private_key: &[u8]) -> CompositeWord<u64, 4> {
     }))
 }
 
-/// The fixed-base comb's advice for `private_key`, computed against `T`'s window tables.
+/// Emits the trailing assertion word of a circuit that asserts nothing.
 ///
-/// The advice is one chord slope per comb window (plus the top window's tangent), and a
-/// slope is a function of the secret scalar's recoded digits — so this is key-equivalent
-/// material, held for as long as the circuit is. Unlike the key itself it cannot be wiped
-/// on drop: [PublicKeyAdvice] exposes no way to clear it. Recorded in `<zkboo>/TODO.md`.
-fn comb_advice<T: CombTableSource>(private_key: &[u8]) -> PublicKeyAdvice {
-    let mut tables = T::make();
-    public_key_advice_with_tables(scalar_of(private_key), &mut tables)
+/// zkboo emits the word only where a circuit opens an assertion scope, so a statement
+/// with nothing to assert would otherwise have no word at all and [checked_payload]
+/// would strip a payload byte from it. Every circuit in this suite therefore ends in a
+/// scope, and this is the empty one: the accumulator finishes as the constant one, which
+/// costs a single output word — no AND gate, no input share.
+pub fn assert_nothing<B: Backend>(frontend: &Frontend<B>) {
+    Assertions::scope(frontend, |_| {});
 }
 
 // ---------------------------------------------------------------------------
@@ -187,7 +190,7 @@ impl Circuit for MasterKeyCircuit {
         let (il, ir) = master_key(frontend.allocator(), seed);
         il.into_iter().for_each(|w| frontend.output(w));
         ir.into_iter().for_each(|w| frontend.output(w));
-        Assertions::new().output(frontend);
+        assert_nothing(frontend);
     }
 }
 
@@ -215,7 +218,7 @@ impl Circuit for HardenedChildCircuit {
             hardened_child_key(frontend.allocator(), chain_code, parent_priv, self.index);
         frontend.output(child_priv);
         child_chain_code.into_iter().for_each(|w| frontend.output(w));
-        Assertions::new().output(frontend);
+        assert_nothing(frontend);
     }
 }
 
@@ -226,51 +229,54 @@ pub struct NormalChildCircuit<T: CombTableSource = ComputedComb> {
     pub chain_code: Vec<u8>,
     pub parent_priv: Vec<u8>,
     pub index: u32,
-    advice: PublicKeyAdvice,
+    mirror_scalar: bool,
     tables: PhantomData<T>,
 }
 zeroize_on_drop!(<T> NormalChildCircuit: parent_priv);
 
 impl<T: CombTableSource> NormalChildCircuit<T> {
-    /// The prover's circuit: the comb advice is computed from the parent key.
+    /// The prover's circuit: the comb follows the parent key.
     pub fn new(chain_code: Vec<u8>, parent_priv: Vec<u8>, index: u32) -> Self {
-        let advice = comb_advice::<T>(&parent_priv);
-        Self { chain_code, parent_priv, index, advice, tables: PhantomData }
+        Self { chain_code, parent_priv, index, mirror_scalar: true, tables: PhantomData }
     }
 
-    /// The verifier's circuit: the comb advice's shape, with no values.
+    /// The verifier's circuit: the comb has no scalar to follow.
     pub fn shaped(chain_code: Vec<u8>, parent_priv: Vec<u8>, index: u32) -> Self {
-        let advice = public_key_advice_shape();
-        Self { chain_code, parent_priv, index, advice, tables: PhantomData }
+        Self { chain_code, parent_priv, index, mirror_scalar: false, tables: PhantomData }
+    }
+
+    /// The scalar the comb mirrors on the host, absent when verifying.
+    fn scalar(&self) -> Option<CompositeWord<u64, 4>> {
+        self.mirror_scalar.then(|| scalar_of(&self.parent_priv))
     }
 }
 
 impl<T: CombTableSource> Circuit for NormalChildCircuit<T> {
     fn exec<B: Backend>(&self, frontend: &Frontend<B>) {
-        let chain_code = self
-            .chain_code
-            .iter()
-            .map(|&b| frontend.alloc(b))
-            .collect::<Vec<_>>();
-        let parent_priv = self
-            .parent_priv
-            .iter()
-            .map(|&b| frontend.input(b))
-            .collect::<Vec<_>>();
-        let mut tables = T::make();
-        let mut assertions = Assertions::new();
-        let (child_priv, child_chain_code) = normal_child_key_with_tables(
-            frontend,
-            chain_code,
-            parent_priv,
-            self.index,
-            &mut tables,
-            &self.advice,
-            &mut assertions,
-        );
-        frontend.output(child_priv);
-        child_chain_code.into_iter().for_each(|w| frontend.output(w));
-        assertions.output(frontend);
+        Assertions::scope(frontend, |assertions| {
+            let chain_code = self
+                .chain_code
+                .iter()
+                .map(|&b| frontend.alloc(b))
+                .collect::<Vec<_>>();
+            let parent_priv = self
+                .parent_priv
+                .iter()
+                .map(|&b| frontend.input(b))
+                .collect::<Vec<_>>();
+            let mut tables = T::make();
+            let (child_priv, child_chain_code) = normal_child_key_with_tables(
+                frontend,
+                chain_code,
+                parent_priv,
+                self.scalar(),
+                self.index,
+                &mut tables,
+                assertions,
+            );
+            frontend.output(child_priv);
+            child_chain_code.into_iter().for_each(|w| frontend.output(w));
+        });
     }
 }
 
@@ -306,7 +312,7 @@ impl Circuit for SeedCircuit {
         let seed =
             bip39_seed_with_salt_words(frontend.allocator(), mnemonic, salt, self.rounds);
         seed.into_iter().for_each(|w| frontend.output(w));
-        Assertions::new().output(frontend);
+        assert_nothing(frontend);
     }
 }
 
@@ -315,48 +321,53 @@ impl Circuit for SeedCircuit {
 /// Generic over where the fixed-base comb reads its window tables; see [comb].
 pub struct PubKeyCircuit<T: CombTableSource = ComputedComb> {
     pub private_key: Vec<u8>,
-    advice: PublicKeyAdvice,
+    mirror_scalar: bool,
     tables: PhantomData<T>,
 }
 zeroize_on_drop!(<T> PubKeyCircuit: private_key);
 
 impl<T: CombTableSource> PubKeyCircuit<T> {
-    /// The prover's circuit: the comb advice is computed from the key.
+    /// The prover's circuit: the comb follows the key.
     pub fn new(private_key: Vec<u8>) -> Self {
-        let advice = comb_advice::<T>(&private_key);
-        Self { private_key, advice, tables: PhantomData }
+        Self { private_key, mirror_scalar: true, tables: PhantomData }
     }
 
-    /// The verifier's circuit: the comb advice's shape, with no values.
+    /// The verifier's circuit: the comb has no scalar to follow.
     pub fn shaped(private_key: Vec<u8>) -> Self {
-        Self { private_key, advice: public_key_advice_shape(), tables: PhantomData }
+        Self { private_key, mirror_scalar: false, tables: PhantomData }
+    }
+
+    /// The scalar the comb mirrors on the host, absent when verifying.
+    fn scalar(&self) -> Option<CompositeWord<u64, 4>> {
+        self.mirror_scalar.then(|| scalar_of(&self.private_key))
     }
 }
 
 impl<T: CombTableSource> Circuit for PubKeyCircuit<T> {
     fn exec<B: Backend>(&self, frontend: &Frontend<B>) {
-        let bytes = self
-            .private_key
-            .iter()
-            .map(|&b| frontend.input(b))
-            .collect::<Vec<_>>();
-        let scalar = be_bytes_to_word(&bytes);
-        let mut tables = T::make();
-        let mut assertions = Assertions::new();
-        // The comb accumulates in affine coordinates and hands back (x, y) already, so
-        // these are the coordinates it produced. Wrapping them into a Jacobian point and
-        // converting back — which is all `public_key_with_tables` does — costs a field
-        // inversion and three multiplications to arrive at the values already in hand.
-        let (x, y) = public_key_affine_with_tables(
-            frontend,
-            scalar,
-            &mut tables,
-            &self.advice,
-            &mut assertions,
-        );
-        frontend.montgomery_output(x);
-        frontend.montgomery_output(y);
-        assertions.output(frontend);
+        Assertions::scope(frontend, |assertions| {
+            let bytes = self
+                .private_key
+                .iter()
+                .map(|&b| frontend.input(b))
+                .collect::<Vec<_>>();
+            let scalar = be_bytes_to_word(&bytes);
+            let mut tables = T::make();
+            // The comb accumulates in affine coordinates and hands back (x, y) already,
+            // so these are the coordinates it produced. Wrapping them into a Jacobian
+            // point and converting back — which is all `public_key_with_tables` does —
+            // costs a field inversion and three multiplications to arrive at the values
+            // already in hand.
+            let (x, y) = public_key_affine_with_tables(
+                frontend,
+                scalar,
+                self.scalar(),
+                &mut tables,
+                assertions,
+            );
+            frontend.montgomery_output(x);
+            frontend.montgomery_output(y);
+        });
     }
 }
 
@@ -374,7 +385,7 @@ impl Circuit for Slip10MasterCircuit {
         let (il, ir) = slip10_ed25519_master(frontend.allocator(), seed);
         il.into_iter().for_each(|w| frontend.output(w));
         ir.into_iter().for_each(|w| frontend.output(w));
-        Assertions::new().output(frontend);
+        assert_nothing(frontend);
     }
 }
 
@@ -407,7 +418,7 @@ impl Circuit for Slip10ChildCircuit {
         );
         child_priv.into_iter().for_each(|w| frontend.output(w));
         child_chain_code.into_iter().for_each(|w| frontend.output(w));
-        Assertions::new().output(frontend);
+        assert_nothing(frontend);
     }
 }
 
@@ -416,43 +427,47 @@ impl Circuit for Slip10ChildCircuit {
 /// Generic over where the fixed-base comb reads its window tables; see [comb].
 pub struct AddressCircuit<T: CombTableSource = ComputedComb> {
     pub private_key: Vec<u8>,
-    advice: PublicKeyAdvice,
+    mirror_scalar: bool,
     tables: PhantomData<T>,
 }
 zeroize_on_drop!(<T> AddressCircuit: private_key);
 
 impl<T: CombTableSource> AddressCircuit<T> {
-    /// The prover's circuit: the comb advice is computed from the key.
+    /// The prover's circuit: the comb follows the key.
     pub fn new(private_key: Vec<u8>) -> Self {
-        let advice = comb_advice::<T>(&private_key);
-        Self { private_key, advice, tables: PhantomData }
+        Self { private_key, mirror_scalar: true, tables: PhantomData }
     }
 
-    /// The verifier's circuit: the comb advice's shape, with no values.
+    /// The verifier's circuit: the comb has no scalar to follow.
     pub fn shaped(private_key: Vec<u8>) -> Self {
-        Self { private_key, advice: public_key_advice_shape(), tables: PhantomData }
+        Self { private_key, mirror_scalar: false, tables: PhantomData }
+    }
+
+    /// The scalar the comb mirrors on the host, absent when verifying.
+    fn scalar(&self) -> Option<CompositeWord<u64, 4>> {
+        self.mirror_scalar.then(|| scalar_of(&self.private_key))
     }
 }
 
 impl<T: CombTableSource> Circuit for AddressCircuit<T> {
     fn exec<B: Backend>(&self, frontend: &Frontend<B>) {
-        let bytes = self
-            .private_key
-            .iter()
-            .map(|&b| frontend.input(b))
-            .collect::<Vec<_>>();
-        let scalar = be_bytes_to_word(&bytes);
-        let mut tables = T::make();
-        let mut assertions = Assertions::new();
-        let address = ethereum_address_with_tables(
-            frontend,
-            scalar,
-            &mut tables,
-            &self.advice,
-            &mut assertions,
-        );
-        address.into_iter().for_each(|w| frontend.output(w));
-        assertions.output(frontend);
+        Assertions::scope(frontend, |assertions| {
+            let bytes = self
+                .private_key
+                .iter()
+                .map(|&b| frontend.input(b))
+                .collect::<Vec<_>>();
+            let scalar = be_bytes_to_word(&bytes);
+            let mut tables = T::make();
+            let address = ethereum_address_with_tables(
+                frontend,
+                scalar,
+                self.scalar(),
+                &mut tables,
+                assertions,
+            );
+            address.into_iter().for_each(|w| frontend.output(w));
+        });
     }
 }
 
@@ -519,10 +534,12 @@ pub fn ethereum_address_circuit() -> AddressCircuit {
 // witness is unreachable on a stock device) and keep their test-vector form.
 //
 // The curve statements need one thing more than a placeholder witness. Their comb
-// takes prover advice — one slope per window — whose *values* a verifier cannot
-// compute and does not need, but whose *count* is part of the circuit's shape. So
-// these constructors build the advice with `shaped`, which supplies that count and
-// nothing else; `new` computes the real slopes and belongs to a prover.
+// derives one chord slope per window from the secret scalar, which a verifier cannot
+// compute and does not need: the slopes are witness values, and a replayed view
+// discards them as it discards every other input value. So these constructors use
+// `shaped`, which hands the comb no scalar to follow; `new` hands it the real one and
+// belongs to a prover. The two build the same circuit, gate for gate — only where a
+// slope's value comes from differs — so their fingerprints agree.
 // ---------------------------------------------------------------------------
 
 /// secp256k1 private-key witness length in bytes, shared by the hardened-child,
