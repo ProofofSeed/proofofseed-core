@@ -56,7 +56,7 @@ fn the_flash_table_reconstructs_to_the_computed_one() {
         for (j, coords) in want.iter().enumerate() {
             let got = entry(base + j);
             for c in 0..3 {
-                assert_eq!(*coords[c].inner(), *got[c].inner(), "window {k} entry {j} coord {c}");
+                assert_eq!(coords[c].inner(), got[c].inner(), "window {k} entry {j} coord {c}");
             }
             seen += 1;
         }

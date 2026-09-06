@@ -1,8 +1,11 @@
 # Host-only benchmark and example run, 2026-09-06
 #
-# Taken after the port to zkboo's assertion/advice/format-identity release.
+# Taken after the port to zkboo's assertion/advice/format-identity release, and re-taken
+# after two further ports the same day: the advised affine conversion (which restored the
+# Taproot and Solana statements to below their pre-regression cost) and the Montgomery
+# newtype separating a stored field value from a canonical residue.
 # Machine: M4 Max, 16 cores, 137 GB. Load average at start:
-13:09  up 18 days,  4:04, 5 users, load averages: 3.26 1.75 1.49
+18:16  up 18 days,  9:11, 5 users, load averages: 2.78 3.23 2.56
 # Every example in proofofseed-host, in source order, release build, run from
 # target/release/examples directly so cargo does not contend.
 
@@ -10,13 +13,13 @@
 === and_timeline
 ================================================================
 one challenge-phase pass; where do AND-messages (keepalive triggers) appear?
-master_key         pass   0.00s  1st AND @  0.00s ( 2.9%)  total ANDs 6400
+master_key         pass   0.01s  1st AND @  0.00s ( 3.8%)  total ANDs 6400
     max gap  0.000s @ AND#3200 (50.0% in)   gaps>5ms: 0  >20ms: 0  >50ms: 0
-public_key         pass   0.16s  1st AND @  0.00s ( 0.0%)  total ANDs 95921
-    max gap  0.000s @ AND#1880 ( 2.0% in)   gaps>5ms: 0  >20ms: 0  >50ms: 0
+public_key         pass   0.18s  1st AND @  0.00s ( 0.0%)  total ANDs 95921
+    max gap  0.000s @ AND#5 ( 0.0% in)   gaps>5ms: 0  >20ms: 0  >50ms: 0
 ethereum_address   pass   0.15s  1st AND @  0.00s ( 0.0%)  total ANDs 96521
-    max gap  0.000s @ AND#64984 (67.3% in)   gaps>5ms: 0  >20ms: 0  >50ms: 0
---- and_timeline exit=0 elapsed=0s
+    max gap  0.000s @ AND#90968 (94.2% in)   gaps>5ms: 0  >20ms: 0  >50ms: 0
+--- and_timeline exit=0 elapsed=1s
 
 ================================================================
 === device_arena
@@ -33,7 +36,7 @@ so each threshold is an upper bound on the device's true need.
 These are UPPER BOUNDS, not requirements. The device served master key in a
 15,872 B heap while this arena demands 19200 B for it, so do not read a threshold
 here as what the device needs -- only as a size that certainly works.
---- device_arena exit=0 elapsed=1s
+--- device_arena exit=0 elapsed=0s
 
 ================================================================
 === device_heap
@@ -73,19 +76,19 @@ Fingerprinting cost (host, release). The pass services no io, so its duration is
 a watchdog constraint on the device; its heap is a memory constraint.
 
   circuit                            peak heap      wall time
-  hardened child (one HMAC)            15716 B        11.5 ms
+  hardened child (one HMAC)            15716 B        13.2 ms
   BIP-39 seed, 1 rounds                13766 B         7.7 ms
-  BIP-39 seed, 2 rounds                13862 B         9.9 ms
-  BIP-39 seed, 8 rounds                13862 B        22.9 ms
-  BIP-39 seed, 64 rounds               13862 B        92.2 ms
-  BIP-39 seed, 256 rounds              13862 B       335.3 ms
-  BIP-39 seed, 2048 rounds             13958 B      2671.1 ms
+  BIP-39 seed, 2 rounds                13862 B        10.0 ms
+  BIP-39 seed, 8 rounds                13862 B        23.5 ms
+  BIP-39 seed, 64 rounds               13862 B        93.8 ms
+  BIP-39 seed, 256 rounds              13862 B       343.9 ms
+  BIP-39 seed, 2048 rounds             13958 B      2712.4 ms
 
 Heap across round counts: VARIES: [13766, 13862, 13862, 13862, 13862, 13958]
-Time: 9.9 ms at 2 rounds to 2671.1 ms at 2048 rounds (269x for 1024x the rounds)
+Time: 10.0 ms at 2 rounds to 2712.4 ms at 2048 rounds (271x for 1024x the rounds)
 Relative to the hardened child, which the device fingerprints without incident:
-  232x at 2048 rounds (hardened child 11.5 ms, peak 15716 B)
---- fingerprint_cost exit=0 elapsed=3s
+  205x at 2048 rounds (hardened child 13.2 ms, peak 15716 B)
+--- fingerprint_cost exit=0 elapsed=4s
 
 ================================================================
 === gen_comb_table
@@ -103,7 +106,7 @@ peak heap of streaming master_key prover (RC=u8, Keccak), by num_iters:
   iters= 4  peak heap =  16836 B (16.4 KiB)   [resident after = 1716 B]
   iters= 8  peak heap =  16836 B (16.4 KiB)   [resident after = 1716 B]
   iters=16  peak heap =  16836 B (16.4 KiB)   [resident after = 1716 B]
---- measure_prove_heap exit=0 elapsed=1s
+--- measure_prove_heap exit=0 elapsed=0s
 
 ================================================================
 === multi_response_soak
@@ -130,7 +133,7 @@ the host library's RC = usize).
 ================================================================
 backend-op timeline (does the hook fire? where are the native gaps?)
 master_key         pass   0.01s  total backend ops 123557
-    1st op @ 0.000s   max inter-op gap  0.000s @ op#1856 ( 1.5% in)
+    1st op @ 0.000s   max inter-op gap  0.000s @ op#61742 (50.0% in)
     native builds (gaps>10ms): 0 totalling  0.00s  ( 0.0% of pass)
 public_key         pass   0.49s  total backend ops 15098462
     1st op @ 0.000s   max inter-op gap  0.000s @ op#1110 ( 0.0% in)
@@ -171,7 +174,7 @@ bip39_seed(r=2)    heap     4162  stack     7008   (state heap    1254)
 public_key         heap     1875  stack     1920   (state heap     587)
 normal_child       heap     4488  stack     8976   (state heap    1321)
 ethereum_address   heap     2542  stack     4888   (state heap     753)
---- profile_mem exit=0 elapsed=0s
+--- profile_mem exit=0 elapsed=1s
 
 ================================================================
 === profile_seed_statements
@@ -231,7 +234,7 @@ exec<RC=u8> master IL = e8f32e723decf4051aefac8e2c93c9c5b214313817cdb01a1494b917
   proof size @438         : 21.4 MiB
   prover mem (RC=u8)      : 13956 B
   executor mem (RC=u8)    : 11309 B
---- profile_slip10 exit=0 elapsed=1s
+--- profile_slip10 exit=0 elapsed=0s
 
 ================================================================
 === proof_size
@@ -303,7 +306,7 @@ Relative to the reference (hardened child (the split's reference), 19872 B):
 | 0 | Ethereum address | `a64f0f8a1a834ec0bd5e548a38941357554a96d9442a2dd6b2cdeabfcb5f1604` |
 | 1 | master key | `95122a518207b23f3749e42081909fed40f04fcb7610f00a2b33434eb7419882` |
 | 1 | hardened child | `78eab452730b77180c49160ff20623cd2a70c167efb44f794d522b1d1806a3ed` |
---- statement_fingerprints exit=0 elapsed=4s
+--- statement_fingerprints exit=0 elapsed=5s
 
 ================================================================
 === validate_statements
@@ -332,4 +335,4 @@ Public outputs above confirm all six circuits are correct.
 --- validate_statements exit=0 elapsed=2s
 
 # Run complete. Load average at end:
-13:09  up 18 days,  4:05, 5 users, load averages: 2.62 1.70 1.48
+18:16  up 18 days,  9:12, 5 users, load averages: 2.17 3.05 2.52

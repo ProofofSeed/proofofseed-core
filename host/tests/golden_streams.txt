@@ -86,6 +86,32 @@
 # Independently: all eight circuit fingerprints are unchanged across the same release
 # (`ledger-app/docs/benchmarks.md`), so the circuits are the same gates in the same order.
 #
+# Re-anchored 2026-09-06 (second time that day), for two changes ported together so that one
+# re-anchor covers both. The split is the same one, and it is the reason for pairing them.
+#
+#   1. This repository's entropy transcript now absorbs zkboo's three domain-separation tags
+#      (TAG_CHALLENGE, TAG_VIEW_COMMITMENT, TAG_PRG), each length-prefixed and in a fixed order.
+#      PROOF_FORMAT_ID already moves when the library's own framing changes, being the digest of
+#      a proof the library makes; what it cannot see is this repository's use of that framing —
+#      the streaming verifier frames its binding with TAG_CHALLENGE itself. The tags are inputs
+#      the challenge depends on through code that lives here, so the transcript absorbs them.
+#      DETERMINISTIC_ENTROPY_VERSION goes 3 -> 4.
+#   2. zkboo introduced a `Montgomery<W, N>` newtype separating a stored field value from a
+#      canonical residue, and renamed `value()` to `canonical()`. Host-side API only.
+#
+# The five `derived/` rows moved and the four `raw/` rows did not, in length or digest — which
+# is the whole content of the check. Change 1 must move exactly the transcript-derived rows and
+# nothing else; change 2 must move nothing at all. If change 2 had touched a proof byte, the raw
+# rows would have said so, and the `raw/public_key` pair is where it would have shown, since the
+# newtype lands on the comb table's stored coordinates.
+#
+#   - `hardened_child` full +32, seg0-2 and seg2-3 unchanged, seg3-4 +32; the three segments
+#     still sum to the full row (103,382 + 51,691 + 51,691 = 206,764). `slip10_child` -64.
+#     Whole input shares of each statement's own 32-byte witness: bimodality re-rolled by a new
+#     transcript, not a format change.
+#   - Independently, all eight circuit fingerprints are unchanged across both
+#     (`ledger-app/docs/benchmarks.md`), as the upstream release said they would be.
+#
 # Earlier history: first recorded at ledger-app 86a4656; re-recorded 2026-08-21 at
 # ledger-app 130cb2e when the deterministic-entropy transcript began absorbing zkboo's
 # PROOF_FORMAT_VERSION (which moved the `derived/` rows and left the `raw/` ones alone);
@@ -93,10 +119,10 @@
 # instead of a public circuit constant, at one input-share byte per salt byte.
 raw/master_key/n2 102626 2bbd5561f2451974ee8587bc1f8b1aa758b222e88c024bd5abd9fcb4e039d90f
 raw/bip39-r2/n2 154008 14f8b31363699d4a448d56728309db255c9db454cc0ce9b51f13f0ce988fcd29
-derived/hardened_child/n4/full 206732 e83b96c6e5b3ee89c197e604372609c430719037e1a9cb39aa9dcf1f7e843459
-derived/hardened_child/n4/seg0-2 103382 20072981302e18328920068323ad86efe3080b28602c054266579e2bdc2e560c
-derived/hardened_child/n4/seg2-3 51691 eac64ec8685fb3371998d030844207c75d434f477e74afce0422fe96e62ff7fe
-derived/hardened_child/n4/seg3-4 51659 d395e3fbf6785d721308795c5443070d16ac9449629949f7659631809a56c1fc
-derived/slip10_child/n4/full 205284 1a8a951100e188c7893d409114805a9e7208e723a4842c09b0761356d8f1a642
+derived/hardened_child/n4/full 206764 855a480c249aa5b6ff97de865e5b959d31b224f019aea0c96ac0e98a2490f10a
+derived/hardened_child/n4/seg0-2 103382 b38a2c2a4a269fb7a4cd83c4ec1a9f4bf6d8cbe24d895dca97222387850aaf6b
+derived/hardened_child/n4/seg2-3 51691 0390f1e43860b5863b228a1ed4fb8d15457ba808b16a28ab6712cd62613a68cc
+derived/hardened_child/n4/seg3-4 51691 aeb8979ae87e4cb44ef1149af489715077376f15aaa11219aab7d0114b0a36ee
+derived/slip10_child/n4/full 205220 ccab5e5f99344a6aceb6f57d471cdf04e4fe8d393d20a07ce0b0b1b55b58fca0
 raw/public_key/n2/full 5808536 ab712170e6aaa8dad348ae48dcf40e8844dad1835a5f44aa199ba44f5ab361be
 raw/public_key/n2/seg1-2 2904268 02f9ab181576fc28c5254c67e7de591cf7feffcb5f0494c20f918deaed414886

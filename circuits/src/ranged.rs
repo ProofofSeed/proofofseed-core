@@ -37,7 +37,8 @@
 //! update that changes a circuit, e.g. a gate-level optimisation, changes the
 //! commitments too), [zkboo::PROOF_FORMAT_ID] (a change to the emitted response
 //! bytes or the commitment preimages is invisible to a circuit fingerprint but moves
-//! every commitment, hence the challenge) and [DETERMINISTIC_ENTROPY_VERSION] (this
+//! every commitment, hence the challenge), the three domain-separation tags this
+//! repository frames its own hashing with, and [DETERMINISTIC_ENTROPY_VERSION] (this
 //! transcript's own layout). The response range itself is deliberately *not*
 //! absorbed: ranges of the same proof must share the entropy.
 //!
@@ -69,7 +70,7 @@ use zeroize::{Zeroize, Zeroizing};
 use zkboo::backend::{Backend, BackendHook, Hooked, NoHook};
 use zkboo::circuit::Circuit;
 use crate::hasher::Keccak256Hasher;
-use zkboo::crypto::{Hasher, PseudoRandomGenerator, Seed};
+use zkboo::crypto::{Hasher, PseudoRandomGenerator, Seed, TAG_CHALLENGE, TAG_PRG, TAG_VIEW_COMMITMENT};
 use zkboo::prover::proof::collectors::ResponseDataCollector;
 use zkboo::prover::proof::{ProofBuilder, ProofOptions};
 use zkboo::prover::views::WordTriplePool;
@@ -89,7 +90,15 @@ use zkboo_circuit_hash::CircuitHashingBackend;
 /// Version `3` absorbs that identity as zkboo's 32-byte [zkboo::PROOF_FORMAT_ID] in
 /// place of the four-byte counter it retired — a change to this transcript's layout,
 /// which is exactly what this constant is for.
-pub const DETERMINISTIC_ENTROPY_VERSION: u32 = 3;
+///
+/// Version `4` adds the three domain-separation tags. [zkboo::PROOF_FORMAT_ID] already
+/// moves if the *library's* framing changes, since it is the digest of a proof the
+/// library makes; what it cannot see is this repository's own use of that framing.
+/// [crate::ranged] is not the only caller — the streaming verifier frames its binding
+/// with [TAG_CHALLENGE] directly — so the tags are inputs the challenge depends on
+/// through code that lives here, and the rule this transcript follows is that it
+/// absorbs everything the challenge depends on.
+pub const DETERMINISTIC_ENTROPY_VERSION: u32 = 4;
 
 /// Absorbs a length-prefixed byte string.
 fn absorb_bytes(h: &mut Keccak256Hasher, data: &[u8]) {
@@ -182,6 +191,10 @@ pub fn request_transcript_digest(
     absorb_bytes(&mut h, b"ProofofSeed/ranged-prover-entropy/request/v1");
     h.update(&DETERMINISTIC_ENTROPY_VERSION.to_be_bytes());
     h.update(&zkboo::PROOF_FORMAT_ID);
+    // Length-prefixed and in a fixed order, so no two tags can be read as one.
+    absorb_bytes(&mut h, TAG_CHALLENGE);
+    absorb_bytes(&mut h, TAG_VIEW_COMMITMENT);
+    absorb_bytes(&mut h, TAG_PRG);
     h.update(&[statement, req.family as u8]);
     h.update(&(req.num_iters as u16).to_be_bytes());
     h.update(&(req.rounds as u16).to_be_bytes());

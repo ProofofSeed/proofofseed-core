@@ -59,7 +59,7 @@ mod flash {
     use zkboo::word::CompositeWord;
     use zkboo_ecc::weierstrass::WindowTables;
     use zkboo_ecc::secp256k1::{Secp256k1FieldPM, Secp256k1PM};
-    use zkboo_modular::montgomery::MontgomeryWord;
+    use zkboo_modular::montgomery::{Montgomery, MontgomeryWord};
 
     use super::CombTableSource;
 
@@ -70,10 +70,19 @@ mod flash {
     type Coords = [MontgomeryWord<u64, 4, Field>; 3];
 
     /// Rebuild one table entry's three Montgomery coordinates from its stored limbs.
+    ///
+    /// `from_raw` is the escape hatch, and this is the case it exists for: the limbs came out
+    /// of `MontgomeryWord::inner` in `gen_comb_table`, so they are the stored representation
+    /// and nothing in the file records that but this line. On secp256k1's pseudo-Mersenne
+    /// field the stored form and the canonical residue are the same word, so getting it
+    /// wrong here would be invisible — the table would reconstruct, the fingerprints would
+    /// match, and the same mistake on a true Montgomery field would make every assertion
+    /// false with no error at all.
     fn reconstruct(limbs: &[[u64; 4]; 3]) -> Coords {
         core::array::from_fn(|c| {
             let bytes: [[u8; 8]; 4] = core::array::from_fn(|i| limbs[c][i].to_le_bytes());
-            MontgomeryWord::from_inner(CompositeWord::from_le_bytes(bytes), Secp256k1FieldPM)
+            let stored = Montgomery::from_raw(CompositeWord::from_le_bytes(bytes));
+            MontgomeryWord::from_inner(stored, Secp256k1FieldPM)
         })
     }
 

@@ -15,7 +15,11 @@ Ported here and in all three consumers, all four green. The upstream record is
 - **`PROOF_FORMAT_VERSION` is replaced by `PROOF_FORMAT_ID`**, a `[u8; 32]` that *is* the digest of
   a canonical reference proof, so re-pinning it and announcing the change are one edit. The
   entropy transcript in `circuits/src/ranged.rs` absorbs it in place of the counter, which is a
-  change to that transcript's own layout, so `DETERMINISTIC_ENTROPY_VERSION` goes **2 → 3**.
+  change to that transcript's own layout, so `DETERMINISTIC_ENTROPY_VERSION` goes **2 → 3**, and
+  **→ 4** when the transcript also began absorbing the three domain-separation tags. The tags are
+  not redundant with the format identity: `PROOF_FORMAT_ID` is the digest of a proof the *library*
+  makes, so it moves when the library's framing changes but cannot see this repository's own use of
+  it — `host/src/lib.rs` frames its binding with `TAG_CHALLENGE` directly.
 - **An assertion accumulator comes only from `Assertions::scope`**, which emits the flag when its
   body returns, so "asserted but never emitted" has no spelling. zkboo declined to make the flag
   universal: **a circuit that opens no scope emits no word.** This suite still wants a uniform
