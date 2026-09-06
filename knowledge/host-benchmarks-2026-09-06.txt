@@ -1,0 +1,334 @@
+# Host-only benchmark and example run, 2026-09-06
+#
+# Taken after the port to zkboo's assertion/advice/format-identity release.
+# Machine: M4 Max, 16 cores, 137 GB. Load average at start:
+13:09  up 18 days,  4:04, 5 users, load averages: 3.26 1.75 1.49
+# Every example in proofofseed-host, in source order, release build, run from
+# target/release/examples directly so cargo does not contend.
+
+================================================================
+=== and_timeline
+================================================================
+one challenge-phase pass; where do AND-messages (keepalive triggers) appear?
+master_key         pass   0.00s  1st AND @  0.00s ( 2.9%)  total ANDs 6400
+    max gap  0.000s @ AND#3200 (50.0% in)   gaps>5ms: 0  >20ms: 0  >50ms: 0
+public_key         pass   0.16s  1st AND @  0.00s ( 0.0%)  total ANDs 95921
+    max gap  0.000s @ AND#1880 ( 2.0% in)   gaps>5ms: 0  >20ms: 0  >50ms: 0
+ethereum_address   pass   0.15s  1st AND @  0.00s ( 0.0%)  total ANDs 96521
+    max gap  0.000s @ AND#64984 (67.3% in)   gaps>5ms: 0  >20ms: 0  >50ms: 0
+--- and_timeline exit=0 elapsed=0s
+
+================================================================
+=== device_arena
+================================================================
+Minimum heap that serves each statement, using the device's own allocator, with
+its non-prover allocations held live. Host holes cost 16 B and the device's 8 B,
+so each threshold is an upper bound on the device's true need.
+
+  statement                                    min heap   peak used
+  BIP-39 mock, 12 words, 2 rounds               14336 B     11752 B
+  master key, 64-byte seed                      19200 B     16680 B
+  hardened child (the shipping statement)       19456 B     16760 B
+
+These are UPPER BOUNDS, not requirements. The device served master key in a
+15,872 B heap while this arena demands 19200 B for it, so do not read a threshold
+here as what the device needs -- only as a size that certainly works.
+--- device_arena exit=0 elapsed=1s
+
+================================================================
+=== device_heap
+================================================================
+Peak prover heap, one response, device config (RC=u8, Keccak-256, discarding sink).
+Device heap budget: 13312 B. The prover is not the only claimant — the
+512-byte stream buffer, the binding, the path and the progress strings are also
+live at the peak — so 'fits' here is necessary, not sufficient.
+
+Elliptic-curve statements, by comb table source:
+  public key, tables recomputed              12820 B    23 live ( 557 B avg)  fits, 492 B spare
+  public key, tables precomputed (device)    12820 B    23 live ( 557 B avg)  fits, 492 B spare
+  ethereum address, tables recomputed        16596 B    22 live ( 754 B avg)  OVER by 3284 B
+  ethereum address, precomputed (device)     16596 B    22 live ( 754 B avg)  OVER by 3284 B
+  normal child, tables recomputed            20388 B    27 live ( 755 B avg)  OVER by 7076 B
+  normal child, precomputed (device)         20388 B    27 live ( 755 B avg)  OVER by 7076 B
+      the buffers making up that peak, largest first:
+      [4096, 2352, 2048, 2048, 1536, 1024, 1024, 1024, 1024, 592, 544, 512, 512, 512, 512, 512, 128, 64, 64, 64, 32, 32, 32, 32, 32, 32, 4]
+      sum 20388 B over 27 buffers
+
+Seed statements, by witness length (the length is a public circuit parameter):
+  master key, 16-byte test vector            16932 B    24 live ( 705 B avg)  OVER by 3620 B
+  master key, 64-byte BIP-39 seed            17748 B    24 live ( 739 B avg)  OVER by 4436 B
+  SLIP-10 master, 64-byte BIP-39 seed        17748 B    24 live ( 739 B avg)  OVER by 4436 B
+  BIP-39 seed, 12-word mnemonic, 2 rounds    12908 B    29 live ( 445 B avg)  fits, 404 B spare
+  BIP-39 seed, 12-word mnemonic, 64 rounds   12908 B    29 live ( 445 B avg)  fits, 404 B spare
+  BIP-39 seed, 12-word mnemonic, 2048 rounds   12908 B    29 live ( 445 B avg)  fits, 404 B spare
+
+For reference, the statement the SRAM split was chosen against:
+  hardened child (test-vector params)        17836 B    27 live ( 660 B avg)  OVER by 4524 B
+--- device_heap exit=0 elapsed=6s
+
+================================================================
+=== fingerprint_cost
+================================================================
+Fingerprinting cost (host, release). The pass services no io, so its duration is
+a watchdog constraint on the device; its heap is a memory constraint.
+
+  circuit                            peak heap      wall time
+  hardened child (one HMAC)            15716 B        11.5 ms
+  BIP-39 seed, 1 rounds                13766 B         7.7 ms
+  BIP-39 seed, 2 rounds                13862 B         9.9 ms
+  BIP-39 seed, 8 rounds                13862 B        22.9 ms
+  BIP-39 seed, 64 rounds               13862 B        92.2 ms
+  BIP-39 seed, 256 rounds              13862 B       335.3 ms
+  BIP-39 seed, 2048 rounds             13958 B      2671.1 ms
+
+Heap across round counts: VARIES: [13766, 13862, 13862, 13862, 13862, 13958]
+Time: 9.9 ms at 2 rounds to 2671.1 ms at 2048 rounds (269x for 1024x the rounds)
+Relative to the hardened child, which the device fingerprints without incident:
+  232x at 2048 rounds (hardened child 11.5 ms, peak 15716 B)
+--- fingerprint_cost exit=0 elapsed=3s
+
+================================================================
+=== gen_comb_table
+================================================================
+wrote 832 entries (79872 bytes data) to <proofofseed>/proofofseed-core/host/../circuits/src/comb_table.rs
+--- gen_comb_table exit=0 elapsed=0s
+
+================================================================
+=== measure_prove_heap
+================================================================
+peak heap of streaming master_key prover (RC=u8, Keccak), by num_iters:
+  iters= 1  peak heap =  16836 B (16.4 KiB)   [resident after = 1716 B]
+  iters= 2  peak heap =  16836 B (16.4 KiB)   [resident after = 1716 B]
+  iters= 3  peak heap =  16836 B (16.4 KiB)   [resident after = 1716 B]
+  iters= 4  peak heap =  16836 B (16.4 KiB)   [resident after = 1716 B]
+  iters= 8  peak heap =  16836 B (16.4 KiB)   [resident after = 1716 B]
+  iters=16  peak heap =  16836 B (16.4 KiB)   [resident after = 1716 B]
+--- measure_prove_heap exit=0 elapsed=1s
+
+================================================================
+=== multi_response_soak
+================================================================
+Master-key proofs with fresh entropy per trial, 24 trials per response count.
+'panic' means the prover itself died; 'invalid' means it produced a proof the
+verifier rejects, which would be the worse of the two.
+
+| responses | verified | invalid | panicked |
+|---|--:|--:|--:|
+| 1 | 24/24 | 0 | 0 |
+| 2 | 24/24 | 0 | 0 |
+| 4 | 24/24 | 0 | 0 |
+| 8 | 24/24 | 0 | 0 |
+
+Every trial verified. The host path is clean at these response counts, so the
+device failure is not reproduced here and is device-specific — or depends on a
+configuration this example does not share (the device uses RC = u8; this uses
+the host library's RC = usize).
+--- multi_response_soak exit=0 elapsed=2s
+
+================================================================
+=== op_timeline
+================================================================
+backend-op timeline (does the hook fire? where are the native gaps?)
+master_key         pass   0.01s  total backend ops 123557
+    1st op @ 0.000s   max inter-op gap  0.000s @ op#1856 ( 1.5% in)
+    native builds (gaps>10ms): 0 totalling  0.00s  ( 0.0% of pass)
+public_key         pass   0.49s  total backend ops 15098462
+    1st op @ 0.000s   max inter-op gap  0.000s @ op#1110 ( 0.0% in)
+    native builds (gaps>10ms): 0 totalling  0.00s  ( 0.0% of pass)
+--- op_timeline exit=0 elapsed=1s
+
+================================================================
+=== profile_extra
+================================================================
+statement                          AND-msgs   bytes/resp        proof @438     prover mem
+
+Controls — the app's secp256k1 statements:
+public_key (affine x‖y)                367523     2904268 B   @438   1213.1 MiB   prover mem (RC=u8)   3795 B
+ethereum_address                       368123     2909068 B   @438   1215.1 MiB   prover mem (RC=u8)   7430 B
+
+Bitcoin / Solana address bindings (elephants):
+pubkey_hash160 (P2PKH/P2WPKH)          370023     2914268 B   @438   1217.3 MiB   prover mem (RC=u8)   8730 B
+p2sh_p2wpkh_payload                    372523     2924268 B   @438   1221.5 MiB   prover mem (RC=u8)   8730 B
+taproot_output_key (P2TR)              892733     6954686 B   @438   2905.0 MiB   prover mem (RC=u8)  10746 B
+ed25519 public key (Solana addr)      1180358     9272403 B   @438   3873.2 MiB   prover mem (RC=u8)   8412 B
+
+BIP-39 seed derivation by round count:
+bip39_seed (r=1)                         6400       51404 B   @438     21.5 MiB   prover mem (RC=u8)  11170 B
+bip39_seed (r=2)                         9600       77004 B   @438     32.2 MiB   prover mem (RC=u8)  11170 B
+bip39_seed (r=8)                        28800      230604 B   @438     96.3 MiB   prover mem (RC=u8)  11170 B
+bip39_seed (r=64)                      208000     1664204 B   @438    695.2 MiB   prover mem (RC=u8)  11170 B
+bip39_seed (r=2048)                   6556800    52454604 B   @438  21910.8 MiB   prover mem (RC=u8)  11170 B
+--- profile_extra exit=0 elapsed=1s
+
+================================================================
+=== profile_mem
+================================================================
+statement           prover RAM (u8 refcounts)
+master_key         heap     4355  stack     8448   (state heap    1288)
+hardened_child     heap     4355  stack     8960   (state heap    1288)
+bip39_seed(r=2)    heap     4162  stack     7008   (state heap    1254)
+public_key         heap     1875  stack     1920   (state heap     587)
+normal_child       heap     4488  stack     8976   (state heap    1321)
+ethereum_address   heap     2542  stack     4888   (state heap     753)
+--- profile_mem exit=0 elapsed=0s
+
+================================================================
+=== profile_seed_statements
+================================================================
+exec<RC=u8> master IL = e8f32e723decf4051aefac8e2c93c9c5b214313817cdb01a1494b917c8436b35
+  matches BIP-32 vector 1: true
+
+── master_key (HMAC-SHA512) ────────────────────────────────
+  max individual refcount : ByWordType { u8: 2, u32: 0, u64: 5 }
+    -> u8 overflow (>255)?  false
+  max cumulative refcount : ByWordType { u8: 368, u32: 0, u64: 133 }
+  max live wordrefs       : ByWordType { u8: 368, u32: 0, u64: 133 }
+  state size (words)      : ByWordType { u8: 368, u32: 0, u64: 115 }
+  executor heap  u8=1844 u16=2335 u32=3317  (stack u8=8376)
+  prover   heap  u8=4355 u16=4846 u32=5828  (stack u8=8448)
+  prover  total  u8=12803 u16=13294 u32=14276
+
+── hardened_child_key ────────────────────────────────
+  max individual refcount : ByWordType { u8: 2, u32: 0, u64: 5 }
+    -> u8 overflow (>255)?  false
+  max cumulative refcount : ByWordType { u8: 400, u32: 0, u64: 133 }
+  max live wordrefs       : ByWordType { u8: 400, u32: 0, u64: 133 }
+  state size (words)      : ByWordType { u8: 368, u32: 0, u64: 115 }
+  executor heap  u8=1844 u16=2335 u32=3317  (stack u8=8888)
+  prover   heap  u8=4355 u16=4846 u32=5828  (stack u8=8960)
+  prover  total  u8=13315 u16=13806 u32=14788
+--- profile_seed_statements exit=0 elapsed=0s
+
+================================================================
+=== profile_slip10
+================================================================
+
+── BIP-32 master key (family 0) ────────────────────────────────
+  max individual refcount : ByWordType { u8: 2, u32: 0, u64: 5 }
+  response size (D=S=32B) : 51313 B
+  proof size @438         : 21.4 MiB
+  prover mem (RC=u8)      : 12803 B
+  executor mem (RC=u8)    : 10220 B
+
+── SLIP-10 master key (family 1) ────────────────────────────────
+  max individual refcount : ByWordType { u8: 2, u32: 0, u64: 5 }
+  response size (D=S=32B) : 51313 B
+  proof size @438         : 21.4 MiB
+  prover mem (RC=u8)      : 12803 B
+  executor mem (RC=u8)    : 10220 B
+
+── BIP-32 hardened child (family 0) ────────────────────────────────
+  max individual refcount : ByWordType { u8: 2, u32: 0, u64: 5 }
+  response size (D=S=32B) : 51691 B
+  proof size @438         : 21.6 MiB
+  prover mem (RC=u8)      : 13315 B
+  executor mem (RC=u8)    : 10732 B
+
+── SLIP-10 hardened child (family 1) ────────────────────────────────
+  max individual refcount : ByWordType { u8: 3, u32: 0, u64: 5 }
+  response size (D=S=32B) : 51329 B
+  proof size @438         : 21.4 MiB
+  prover mem (RC=u8)      : 13956 B
+  executor mem (RC=u8)    : 11309 B
+--- profile_slip10 exit=0 elapsed=1s
+
+================================================================
+=== proof_size
+================================================================
+statement           bytes/response   streaming s/response (@3,309 B/s; excludes the challenge phase)
+master_key              51313      ~16 s
+hardened_child          51691      ~16 s
+bip39_seed(r=2)         77004      ~23 s
+public_key            2904268      ~878 s
+normal_child          2954134      ~893 s
+ethereum_address      2907372      ~879 s
+--- proof_size exit=0 elapsed=1s
+
+================================================================
+=== salt_secrecy_cost
+================================================================
+Cost of making the BIP-39 PBKDF2 salt secret, isolated to the one HMAC it appears in.
+Salt = "mnemonic" + passphrase, so 8 bytes plus the passphrase's length.
+
+salt (passphrase)              public         secret   extra/resp
+8 B (0 char)                  51390 B        51398 B          8 B
+16 B (8 char)                 51390 B        51406 B         16 B
+20 B (12 char)                51390 B        51410 B         20 B
+32 B (24 char)                51390 B        51422 B         32 B
+72 B (64 char)                51390 B        51462 B         72 B
+
+The full statement at 2048 rounds is 52454598 B per response, so a 12-character
+passphrase made secret costs 20 B more per response: 0.0000% .
+
+⚠️ The salt's *length* stays public either way — it is the number of input words —
+so this hides the passphrase's value, not its length nor the fact that one exists.
+--- salt_secrecy_cost exit=0 elapsed=1s
+
+================================================================
+=== stack_profile
+================================================================
+Prover call-stack depth by statement, both phases, sampled at every backend
+operation. Ratios between rows are the signal; absolute bytes are host figures
+and do not transfer to the device.
+
+  statement                                        depth       samples
+  hardened child (the split's reference)         19872 B        197374
+  master key, compiled-in test vector            19616 B        194508
+  master key, 64-byte seed                       19616 B        194412
+  BIP-39 mock, 12 words, 2 rounds  <- died       19184 B        289666
+  BIP-39 mock, 12 words, 1 rounds                19184 B        193314
+  BIP-39 mock, 12 words, 4 rounds                19184 B        482370
+  BIP-39 mock, 12 words, 16 rounds               19184 B       1638594
+
+Relative to the reference (hardened child (the split's reference), 19872 B):
+  master key, compiled-in test vector             -1.3%
+  master key, 64-byte seed                        -1.3%
+  BIP-39 mock, 12 words, 2 rounds  <- died        -3.5%
+  BIP-39 mock, 12 words, 1 rounds                 -3.5%
+  BIP-39 mock, 12 words, 4 rounds                 -3.5%
+  BIP-39 mock, 12 words, 16 rounds                -3.5%
+--- stack_profile exit=0 elapsed=0s
+
+================================================================
+=== statement_fingerprints
+================================================================
+| family | statement | fingerprint |
+|---|---|---|
+| 0 | master key | `348b715964496e0d3d1bee8ab63aca573a76c12b3b1c5d125ac884f076febd87` |
+| 0 | hardened child | `bd121f6f7aa11c76705c717779c1a7c45aff1e2fa6680183a84e62fa0ae46ebb` |
+| 0 | BIP-39 seed (r=2048) | `12c44933f370913b4fc1dbea55532e0a7a23f82fd23b8d13ce232416ce00ed6a` |
+| 0 | public key | `5330509c10486e74469b053338499d967d83768ba7129d807418099eace03a21` |
+| 0 | normal child | `f26f9f186016bf142d39a6eaab53a9e07dd8a775268a01d46627850fa7d1ce39` |
+| 0 | Ethereum address | `a64f0f8a1a834ec0bd5e548a38941357554a96d9442a2dd6b2cdeabfcb5f1604` |
+| 1 | master key | `95122a518207b23f3749e42081909fed40f04fcb7610f00a2b33434eb7419882` |
+| 1 | hardened child | `78eab452730b77180c49160ff20623cd2a70c167efb44f794d522b1d1806a3ed` |
+--- statement_fingerprints exit=0 elapsed=4s
+
+================================================================
+=== validate_statements
+================================================================
+Executing each statement on its test vector and checking the output:
+
+  master_key                   OK
+  hardened_child priv          OK
+  hardened_child cc            OK
+  bip39_seed                   OK
+  public_key                   OK
+  normal_child priv            OK
+  normal_child cc              OK
+  ethereum_address             OK
+
+Prover peak heap (RC=u8) — screens and ranks; does NOT bound device HEAP_SIZE:
+  master_key        17516 B
+  hardened_child    18412 B
+  bip39 (r=2)       13543 B
+  bip39 (r=64)      13543 B
+  public_key        13468 B
+  normal_child      20972 B
+  ethereum_address  17244 B
+
+Public outputs above confirm all six circuits are correct.
+--- validate_statements exit=0 elapsed=2s
+
+# Run complete. Load average at end:
+13:09  up 18 days,  4:05, 5 users, load averages: 2.62 1.70 1.48
