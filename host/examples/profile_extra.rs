@@ -30,9 +30,10 @@ const KEY: [u8; 32] = [0x5A; 32];
 /// A 64-byte seed, the length a BIP-39 mnemonic produces.
 const SEED: [u8; 64] = [0x5A; 64];
 
-/// Every comb here is handed `None` rather than a scalar to follow: the profiling
-/// backend discards input values, so the host mirror would compute slopes nothing
-/// reads. The gate counts these figures come from are the same either way.
+/// Every circuit here is handed `None` for whatever the host would otherwise mirror —
+/// a comb's scalar, an advised affine point: the profiling backend discards input values,
+/// so a mirror would compute what nothing reads. The gate counts these figures come from
+/// are the same either way, which is the whole reason a verifier can pass `None` too.
 struct PubkeyHash160;
 impl Circuit for PubkeyHash160 {
     fn exec<B: Backend>(&self, frontend: &Frontend<B>) {
@@ -75,9 +76,9 @@ impl Circuit for TaprootOutputKey {
 struct Ed25519Pubkey;
 impl Circuit for Ed25519Pubkey {
     fn exec<B: Backend>(&self, frontend: &Frontend<B>) {
-        Assertions::scope(frontend, |_| {
+        Assertions::scope(frontend, |assertions| {
             let key: [_; 32] = core::array::from_fn(|i| frontend.input(KEY[i]));
-            ed25519_public_key(frontend, &key)
+            ed25519_public_key(frontend, &key, None, assertions)
                 .into_iter()
                 .for_each(|w| frontend.output(w));
         });
@@ -93,9 +94,9 @@ impl Circuit for Ed25519Pubkey {
 struct SolanaPubkey;
 impl Circuit for SolanaPubkey {
     fn exec<B: Backend>(&self, frontend: &Frontend<B>) {
-        Assertions::scope(frontend, |_| {
+        Assertions::scope(frontend, |assertions| {
             let seed = (0..64).map(|i| frontend.input(SEED[i])).collect::<Vec<_>>();
-            solana_pubkey(frontend, seed, 0)
+            solana_pubkey(frontend, seed, 0, None, assertions)
                 .into_iter()
                 .for_each(|w| frontend.output(w));
         });

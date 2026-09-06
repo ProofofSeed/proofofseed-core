@@ -149,9 +149,9 @@ ethereum_address                       368123     2909068 B   @438   1215.1 MiB 
 Bitcoin / Solana address bindings (elephants):
 pubkey_hash160 (P2PKH/P2WPKH)          370023     2914268 B   @438   1217.3 MiB   prover mem (RC=u8)   8730 B
 p2sh_p2wpkh_payload                    372523     2924268 B   @438   1221.5 MiB   prover mem (RC=u8)   8730 B
-taproot_output_key (P2TR)              892733     6954686 B   @438   2905.0 MiB   prover mem (RC=u8)  10746 B
-solana_pubkey (the statement)         1212358     9528435 B   @438   3980.1 MiB   prover mem (RC=u8)  14305 B
-  of which ed25519_public_key         1180358     9272403 B   @438   3873.2 MiB   prover mem (RC=u8)   8412 B
+taproot_output_key (P2TR)              800448     6315429 B   @438   2638.0 MiB   prover mem (RC=u8)  10746 B
+solana_pubkey (the statement)         1118276     8875201 B   @438   3707.3 MiB   prover mem (RC=u8)  14305 B
+  of which ed25519_public_key         1086276     8619169 B   @438   3600.3 MiB   prover mem (RC=u8)   8412 B
 
 BIP-39 seed derivation by round count:
 bip39_seed (r=1)                         6400       51404 B   @438     21.5 MiB   prover mem (RC=u8)  11170 B
