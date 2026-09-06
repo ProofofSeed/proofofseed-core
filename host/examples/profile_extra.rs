@@ -16,7 +16,7 @@ use proofofseed_circuits::{
 use zkboo::backend::{Backend, Frontend};
 use zkboo::circuit::{Assertions, Circuit};
 use zkboo_bip32::{
-    be_bytes_to_word, ed25519_public_key, p2sh_p2wpkh_payload, pubkey_hash160,
+    be_bytes_to_word, ed25519_public_key, p2sh_p2wpkh_payload, pubkey_hash160, solana_pubkey,
     taproot_output_key,
 };
 use zkboo_profiling::{ProfilingData, profile};
@@ -26,6 +26,9 @@ type S = [u8; 32];
 
 /// A fixed nonzero witness; sizes are data-oblivious, so any value profiles alike.
 const KEY: [u8; 32] = [0x5A; 32];
+
+/// A 64-byte seed, the length a BIP-39 mnemonic produces.
+const SEED: [u8; 64] = [0x5A; 64];
 
 /// Every comb here is handed `None` rather than a scalar to follow: the profiling
 /// backend discards input values, so the host mirror would compute slopes nothing
@@ -81,6 +84,24 @@ impl Circuit for Ed25519Pubkey {
     }
 }
 
+/// The whole Solana statement: a 64-byte seed through the SLIP-10 chain at
+/// `m/44'/501'/account'/0'`, then the ed25519 public key.
+///
+/// This is the statement, and [Ed25519Pubkey] above is only its last step. The two differ
+/// by the SLIP-10 layer, which is why they are profiled side by side: reading one row for
+/// the other understates the statement, and did.
+struct SolanaPubkey;
+impl Circuit for SolanaPubkey {
+    fn exec<B: Backend>(&self, frontend: &Frontend<B>) {
+        Assertions::scope(frontend, |_| {
+            let seed = (0..64).map(|i| frontend.input(SEED[i])).collect::<Vec<_>>();
+            solana_pubkey(frontend, seed, 0)
+                .into_iter()
+                .for_each(|w| frontend.output(w));
+        });
+    }
+}
+
 /// AND-messages: one per AND gate, plus one per CARRY gate, at that gate's word width.
 ///
 /// This is the structural quantity. A response size moves by a whole input share whenever
@@ -120,7 +141,8 @@ fn main() {
     report("pubkey_hash160 (P2PKH/P2WPKH)", &profile(&PubkeyHash160));
     report("p2sh_p2wpkh_payload", &profile(&P2shP2wpkhPayload));
     report("taproot_output_key (P2TR)", &profile(&TaprootOutputKey));
-    report("ed25519 public key (Solana addr)", &profile(&Ed25519Pubkey));
+    report("solana_pubkey (the statement)", &profile(&SolanaPubkey));
+    report("  of which ed25519_public_key", &profile(&Ed25519Pubkey));
     println!("\nBIP-39 seed derivation by round count:");
     for r in [1usize, 2, 8, 64, 2048] {
         report(
