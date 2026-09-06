@@ -242,12 +242,18 @@ fn alloc_seed() -> Vec<u8> {
 /// Smallest arena that serves `circuit`, by bisection, with the peak it used there.
 fn threshold<C: Circuit>(label: &'static str, circuit: &C, binding: &[u8]) -> (&'static str, usize, usize) {
     let (mut lo, mut hi) = (4_096usize, 40_960usize);
-    let mut peak_at_hi = 0;
     // Establish that the upper bound really is served, so a bisection that never finds a
-    // served size is visible as such instead of returning the bound itself.
+    // served size is visible as such instead of returning the bound itself. The refusal
+    // carries its own diagnosis, since the allocation that failed is the whole story and
+    // an assertion saying only "refused" would send the next reader back here to add this.
     let top = run(hi, 2, binding, circuit);
-    assert!(top.served, "{label}: even {hi} B was refused");
-    peak_at_hi = top.peak_used;
+    assert!(
+        top.served,
+        "{label}: even {hi} B was refused — {} allocations failed, the last wanting {} B \
+         at alignment {} with {} B free",
+        top.oom_count, top.oom_size, top.oom_align, top.oom_free,
+    );
+    let mut peak_at_hi = top.peak_used;
     while hi - lo > 256 {
         let mid = (lo + hi) / 2 / 256 * 256;
         let o = run(mid, 2, binding, circuit);
