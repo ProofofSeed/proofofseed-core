@@ -121,12 +121,12 @@ Acceptance:
 ## Milestone 4 — cross-prover interop (hardware, folds into the range-proving acceptance)
 
 A device range and a CLI range of one request (same seed) assemble into one verifying proof.
-Given milestone 2's byte-equality and the pre-registered device↔host equality step in `ledger-app/docs/range-proving.md`, this is confirmation, not discovery.
+Given milestone 2's byte-equality and the pre-registered device↔host equality step in `ledger-app/knowledge/range-proving.md`, this is confirmation, not discovery.
 
 ## Sequencing and publication
 
 - Extraction starts only **after** the ledger-app hardware gate (multi-chain milestone 4 + range-proving acceptance) and that branch's merge to main: extraction is pure churn to run through a gate, and the gate's baseline should be the tree its milestones were built on.
-- **Publication to crates.io / PyPI is blocked on zkboo 0.2.0 reaching crates.io** (the same unblocking event recorded in `ledger-app/docs/dependencies.md`; several zkboo crates are ahead of their remotes or have none).
+- **Publication to crates.io / PyPI is blocked on zkboo 0.2.0 reaching crates.io** (the same unblocking event recorded in `ledger-app/knowledge/dependencies.md`; several zkboo crates are ahead of their remotes or have none).
   Until then: local installs with `[patch.crates-io]` path overrides and `maturin develop`.
   Name reservations on crates.io/PyPI are the author's call at that point.
 

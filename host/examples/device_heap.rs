@@ -110,7 +110,7 @@ impl ResponseDataCollector<[u8; 32], [u8; 32]> for DiscardSink {
 /// it is not a fixed offset and not a fixed ratio, so these figures **cannot be rescaled**
 /// into device figures. Use them to rank and to screen; take every number that reaches a
 /// document from the device's own `heap_peak` telemetry (`ledger-app/host/bench_matrix.py`,
-/// rows under `ledger-app/docs/bench/`).
+/// rows under `ledger-app/knowledge/bench/`).
 ///
 /// A conclusion previously drawn from these figures — that the normal-child statement
 /// cannot fit — was withdrawn for exactly this reason.
