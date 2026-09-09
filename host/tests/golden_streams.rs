@@ -2,15 +2,7 @@
 
 //! Proof bytes do not move unless a change is meant to move them.
 //!
-//! This test recomputes each stream in `golden_streams.txt` with the parameters that
-//! recorded it and compares length and Keccak-256. The deterministic-entropy transcript,
-//! the circuit fingerprints and `DETERMINISTIC_ENTROPY_VERSION` are format commitments
-//! rather than internals, so any of them moving shows up here.
-//!
-//! The fixture began as the extraction acceptance — proof-byte neutrality against the
-//! pre-extraction ledger-app tree at 86a4656 — and that is no longer what it asserts;
-//! ZKBoo 2.0.0's breaking format left no tree able to reproduce the 1.x bytes. The
-//! fixture's own header records the transition and what each row is now good for.
+//! What the rows assert and their re-anchoring history: `knowledge/proof-byte-pins.md`.
 
 use proofofseed_circuits::ranged::{
     WitnessMaterial, deterministic_seed_entropy, ranged_request_digest,

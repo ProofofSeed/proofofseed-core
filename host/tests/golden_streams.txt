@@ -1,122 +1,12 @@
-# Proof-byte pins: the streams this repository's circuits and prover produce, so that a
-# change to either is seen rather than assumed. Each row is `name byte_length keccak256(stream)`.
+# Proof-byte pins: the streams this repository's circuits and prover produce.
+# Each row is `name byte_length keccak256(stream)`.
 #
-# WHAT THIS FIXTURE IS, AND WHAT IT STOPPED BEING
+# The `raw/` rows draw prover entropy directly; the `derived/` rows draw it through the
+# deterministic-entropy transcript. A change to that transcript must move the `derived/`
+# rows and leave the `raw/` rows byte-identical.
 #
-# It began as the extraction acceptance: recorded from the untouched ledger-app tree at
-# 86a4656, it showed that moving the circuits and the prover into this repository left
-# every proof byte alone. That claim was established and it stands in the history — the
-# fixture passed, unaltered, from the extraction through 6c5978c.
-#
-# It can no longer serve that purpose. ZKBoo 2.0.0 is a breaking format change (proof
-# format version 3, an assertion word appended to every circuit's outputs, a rebuilt
-# elliptic-curve comb), so no tree that exists today reproduces the 1.x bytes, and the
-# second implementation to record from is long gone. Re-anchoring here is therefore
-# circular with respect to the extraction, and the extraction is NOT what these rows
-# assert any more. What they assert is narrower and still worth having: proof bytes do
-# not move unless a change is meant to move them, and when one is, exactly the intended
-# rows move and the others are seen not to.
-#
-# Re-anchored 2026-08-28 against ZKBoo 2.0.0. Eight of the nine rows moved:
-#   - `raw/bip39-r2/n2` and the `derived/hardened_child/*` rows shrank, the hardened-child
-#     ones by 32 B per response, which is that statement's witness (32 parent-key bytes)
-#     appearing or not with the challenge — these responses are bimodal in size, so a row
-#     moving by exactly one input share is a coin landing the other way, not a defect.
-#   - `derived/slip10_child/n4/full` kept its length and changed digest: the `derived/`
-#     rows key their prover entropy on the circuit fingerprint, which 2.0.0 moved.
-#   - `raw/public_key/*` fell by 3.77x, the elliptic-curve reduction 2.0.0 was built for.
-#   - `raw/master_key/n2` did NOT move, in length or digest. It is the one row whose
-#     circuit 2.0.0 left alone and whose entropy is raw rather than derived, so it is the
-#     control: a future change that claims to touch only the curve statements has to leave
-#     this row exactly as it is.
-#
-# Moved again 2026-08-28, `raw/public_key/*` only: the public-key statement stopped
-# wrapping the comb's affine output into a Jacobian point and converting it back. The
-# n=2 stream fell 181,086 B (3.02%) and the single response fell to 2,904,268 B. The
-# other seven rows did not move — including `raw/master_key/n2`, the control, and the
-# hardened-child rows, whose statement shares none of the curve machinery.
-#
-#
-# Re-anchored 2026-09-04 against zkboo v1.2.0. All nine digests moved and there is no row
-# left that could not have: v1.2.0 domain-separates the Fiat-Shamir transcript, the view
-# commitments and the pseudo-random generator, so every party seed, every commitment and
-# every challenge is drawn differently. `raw/master_key/n2` moved with the rest, which
-# costs this fixture its control row for this one change; what stands in for it is the
-# lengths, which say something a digest cannot.
-#
-# The lengths say the wire format did not move. Every delta is a whole number of input
-# shares of the statement's own witness, which is the bimodality: a response carries
-# party 2's input share only for two of the three challenges, and the challenges are
-# exactly what a new transcript re-draws.
-#   - `raw/master_key/n2` +32 = two responses gaining the 16-byte seed witness.
-#   - `raw/bip39-r2/n2` +214 = two responses gaining 107 B, the 93-byte mnemonic plus the
-#     14-byte salt.
-#   - the four `hardened_child` rows +64, +32, +32, +0: two more responses of the four
-#     carry the 32-byte parent key, and the three segments still sum to the full row.
-#   - `derived/slip10_child/n4/full` +32, likewise one 32-byte parent key.
-#   - both `raw/public_key` rows are byte-identical in length. That is the load-bearing
-#     one: v1.2.0 moved the comb's advice out of a backend hint and into circuit inputs
-#     the caller computes, and had that changed what goes on the wire these rows would
-#     have moved. The curve statements' 1,696-byte input share is still the 32-byte key
-#     plus 52 comb slopes of 32 bytes.
-#
-# Re-anchored 2026-09-06 against zkboo's assertion/advice/format-identity release. Five
-# rows moved and four did not, and the split is the whole finding.
-#
-# What changed upstream: the comb's advice objects are deleted — the comb now takes the
-# scalar it multiplies by and follows it on the host, one window at a time, inside circuit
-# execution — and `PROOF_FORMAT_VERSION` is replaced by `PROOF_FORMAT_ID`, a 32-byte digest
-# of a canonical reference proof. This repository's entropy transcript absorbs the new
-# constant in place of the old one, which is a change to the transcript's own layout, so
-# `DETERMINISTIC_ENTROPY_VERSION` goes 2 -> 3.
-#
-#   - The five `derived/` rows moved, because their prover entropy is derived from that
-#     transcript and the transcript now absorbs 32 different bytes under a new version.
-#     Lengths: `hardened_child` full +32 and seg0-2 +32, seg2-3 and seg3-4 unchanged, so
-#     one more of the four responses carries the 32-byte parent key and the three segments
-#     still sum to the full row; `slip10_child` +32, likewise one parent key. Bimodality
-#     re-rolled by different entropy, not a format change.
-#   - The four `raw/` rows are byte-identical, digest and length. That is what the control
-#     row lost in the previous re-anchor, recovered: their entropy does not go through the
-#     transcript, so if the proof bytes had moved they would have moved. Both
-#     `raw/public_key` rows are among them, which is the load-bearing pair — the advice
-#     rework is entirely a curve-statement change, and it put not one byte differently on
-#     the wire.
-#
-# Independently: all eight circuit fingerprints are unchanged across the same release
-# (`ledger-app/docs/benchmarks.md`), so the circuits are the same gates in the same order.
-#
-# Re-anchored 2026-09-06 (second time that day), for two changes ported together so that one
-# re-anchor covers both. The split is the same one, and it is the reason for pairing them.
-#
-#   1. This repository's entropy transcript now absorbs zkboo's three domain-separation tags
-#      (TAG_CHALLENGE, TAG_VIEW_COMMITMENT, TAG_PRG), each length-prefixed and in a fixed order.
-#      PROOF_FORMAT_ID already moves when the library's own framing changes, being the digest of
-#      a proof the library makes; what it cannot see is this repository's use of that framing —
-#      the streaming verifier frames its binding with TAG_CHALLENGE itself. The tags are inputs
-#      the challenge depends on through code that lives here, so the transcript absorbs them.
-#      DETERMINISTIC_ENTROPY_VERSION goes 3 -> 4.
-#   2. zkboo introduced a `Montgomery<W, N>` newtype separating a stored field value from a
-#      canonical residue, and renamed `value()` to `canonical()`. Host-side API only.
-#
-# The five `derived/` rows moved and the four `raw/` rows did not, in length or digest — which
-# is the whole content of the check. Change 1 must move exactly the transcript-derived rows and
-# nothing else; change 2 must move nothing at all. If change 2 had touched a proof byte, the raw
-# rows would have said so, and the `raw/public_key` pair is where it would have shown, since the
-# newtype lands on the comb table's stored coordinates.
-#
-#   - `hardened_child` full +32, seg0-2 and seg2-3 unchanged, seg3-4 +32; the three segments
-#     still sum to the full row (103,382 + 51,691 + 51,691 = 206,764). `slip10_child` -64.
-#     Whole input shares of each statement's own 32-byte witness: bimodality re-rolled by a new
-#     transcript, not a format change.
-#   - Independently, all eight circuit fingerprints are unchanged across both
-#     (`ledger-app/docs/benchmarks.md`), as the upstream release said they would be.
-#
-# Earlier history: first recorded at ledger-app 86a4656; re-recorded 2026-08-21 at
-# ledger-app 130cb2e when the deterministic-entropy transcript began absorbing zkboo's
-# PROOF_FORMAT_VERSION (which moved the `derived/` rows and left the `raw/` ones alone);
-# `raw/bip39-r2/n2` re-anchored 2026-08-22 when the BIP-39 PBKDF2 salt became witness
-# instead of a public circuit constant, at one input-share byte per salt byte.
+# What the rows assert, what they stopped asserting, and the full re-anchoring history:
+# knowledge/proof-byte-pins.md.
 raw/master_key/n2 102626 2bbd5561f2451974ee8587bc1f8b1aa758b222e88c024bd5abd9fcb4e039d90f
 raw/bip39-r2/n2 154008 14f8b31363699d4a448d56728309db255c9db454cc0ce9b51f13f0ce988fcd29
 derived/hardened_child/n4/full 206764 855a480c249aa5b6ff97de865e5b959d31b224f019aea0c96ac0e98a2490f10a
