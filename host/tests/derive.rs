@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-//! Anchors for the executor-based derivation module: the same published vectors
-//! the statement tests use, reached through `derive`'s public API — plus the
-//! byte-equality of the write-streaming prover against the in-memory one.
+//! The executor-based derivation module against the published vectors, and the
+//! byte-equality of the write-streaming prover with the in-memory one.
 
 use std::str::FromStr;
 

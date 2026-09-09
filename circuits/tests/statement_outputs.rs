@@ -1,11 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
 //! Every statement's public output, against its canonical vector.
-//!
-//! These checks existed only inside `validate_statements`, a hand-run example — so they
-//! were not run by anything, and five of the six had been failing since ZKBoo 2.0.0
-//! appended the assertion word without anyone seeing it. The values are what a verifier
-//! pins a proof against, so they belong in the suite.
 
 use proofofseed_circuits::{
     EXPECTED_BIP39_SEED, EXPECTED_ETH_ADDRESS, EXPECTED_HARDENED_CC, EXPECTED_HARDENED_PRIV,

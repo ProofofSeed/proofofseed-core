@@ -1,24 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-//! Bitcoin recovery-statement validation, entirely off-device.
-//!
-//! The hardened-child statement is chain-agnostic (BIP-32 is the same derivation for
-//! Bitcoin and Ethereum); these tests make that demonstrable by anchoring the exact
-//! shared circuits the device proves with (`proofofseed_circuits`) at Bitcoin account paths,
-//! against two independent references:
-//!
-//! - the published BIP-84/BIP-86 test vectors (base58check-decoded in-test, so a
-//!   corrupted vector string fails loudly rather than silently anchoring nothing), and
-//! - `rust-bitcoin`'s BIP-32 implementation, for the purposes (44', 49') whose BIP
-//!   documents publish no mainnet account-level keys.
-//!
-//! The full pipeline is covered end to end with public data only: BIP-39 mnemonic →
-//! seed (2048 PBKDF2 rounds, in-circuit) → master node (in-circuit) → three hardened
-//! steps per purpose (in-circuit) → the published account keys. Round trips then prove
-//! and verify the account-level hardened-child statement in the device configuration
-//! (Keccak-256 suite, request-anchored chain code + index, nonempty binding), with the
-//! wrong-chain-code / wrong-index / wrong-binding refusals asserted against the same
-//! proof that just verified — each refusal test's positive twin shows it can go green.
+//! Bitcoin recovery-statement validation, off-device, against the published BIP-84 and
+//! BIP-86 vectors and against `rust-bitcoin` where those publish no account-level keys.
 
 use std::str::FromStr;
 

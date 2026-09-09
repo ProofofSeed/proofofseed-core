@@ -2,14 +2,8 @@
 
 //! The proof hash shared by every ProofofSeed prover and verifier.
 //!
-//! Keccak-256 — Ethereum's `keccak256`, the original Keccak padding byte `0x01` rather than
-//! NIST SHA3-256's `0x06`. It fixes the Fiat-Shamir transcript, the view commitments and the
-//! pseudo-random generator, so a device, a CLI and a Python package that pick it produce
-//! identical proof bytes, and one that picks anything else produces proofs none of the others
-//! will verify.
-//!
-//! `zkboo` defines the [Hasher] trait and ships no concrete hash, leaving the choice to the
-//! consumer; this module is where the ecosystem makes it, once.
+//! `zkboo` ships no concrete hash, so this module is where the ecosystem makes the
+//! choice, once; see `knowledge/dependencies.md`.
 
 use core::fmt::{self, Debug};
 
@@ -42,8 +36,8 @@ impl Hasher for Keccak256Hasher {
     }
 
     fn finalize_into(&mut self, out: &mut Self::Digest) {
-        // `Keccak::finalize` consumes the sponge; swap in a fresh state so the hasher stays
-        // reusable after finalization, as the `Hasher` contract requires.
+        // `Keccak::finalize` consumes the sponge, so a fresh state is swapped in to keep
+        // the hasher reusable, as the `Hasher` contract requires.
         let inner = core::mem::replace(&mut self.inner, Keccak::v256());
         inner.finalize(out);
     }

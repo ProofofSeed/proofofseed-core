@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-//! Prints the circuit fingerprint of every implemented statement, for the table in
-//! `ledger-app/docs/benchmarks.md`.
+//! Prints the circuit fingerprint of every implemented statement.
 //!
 //! Run: `cargo run --release -p proofofseed-host --example statement_fingerprints`
 

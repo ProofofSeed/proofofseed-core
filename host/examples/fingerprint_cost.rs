@@ -1,18 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-//! What the circuit-fingerprinting pass costs, in heap and in time, as a function of the
-//! one public parameter that scales it: the BIP-39 round count.
-//!
-//! The pass exists because a ranged proof binds its deterministic prover entropy to the
-//! circuit's structural digest, and because the device can be asked for that digest
-//! directly. It runs the whole circuit through a hashing backend and — unlike the prover
-//! — services no io while it does, so its cost is a hard constraint rather than merely a
-//! slow operation: past some size the secure element's watchdog reboots the device.
-//!
-//! The two failure modes are told apart by this measurement. If the peak heap grows with
-//! the round count, a large fingerprint is a memory problem and the reboot would be
-//! memory-corruption-class. If the heap is flat and only the time grows, it is a watchdog
-//! problem, which is recoverable and fixable by feeding the watchdog.
+//! What the circuit-fingerprinting pass costs, in heap and in time, as a function of
+//! the BIP-39 round count.
 //!
 //! Run: `cargo run --release -p proofofseed-host --example fingerprint_cost`
 

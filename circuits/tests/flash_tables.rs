@@ -1,24 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-//! The precomputed comb table, against the comb the circuits actually run.
-//!
-//! Two independent things can go wrong with a precomputed table, and each has its
-//! own test here.
-//!
-//! **Values.** The table must reconstruct to exactly what `ComputedWindowTables`
-//! produces, or the proofs it generates verify against nothing.
-//!
-//! **Shape.** The number of entries per window sets how many gates the constant-time
-//! select emits, so a table generated for a different comb changes the *circuit*, not
-//! just its constants. This is not hypothetical: the table once carried
-//! pre-optimisation windowing (all multiples, 32 per window) while the comb had moved
-//! to storing only the odd ones (16), and every elliptic-curve proof would have
-//! panicked on the consumer's length assertion. What made that reachable was a check
-//! that lived as a hand-run example, so nobody ran it.
-//!
-//! Both circuits under test are now the *same* circuit — `PubKeyCircuit<T>` — with
-//! the table source swapped, rather than two hand-kept copies of one body. The
-//! fingerprint comparison is therefore about the tables alone.
+//! The precomputed comb table, in value and in shape, against the comb the circuits run.
 
 use proofofseed_circuits::comb::{CombTableSource, ComputedComb, FlashComb, entry, layout};
 use proofofseed_circuits::{

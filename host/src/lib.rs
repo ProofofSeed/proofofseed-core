@@ -1,19 +1,9 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-//! Host-side streaming verifier for ProofofSeed Ledger proofs.
+//! The host-side streaming verifier and prover harness for ProofofSeed proofs.
 //!
-//! The device streams a ZKBoo proof as a flat byte sequence (see the app's
-//! `stream.rs`): per response `challenge(1) || seed_challenge(32) || seed_next(32)`,
-//! then the AND-message and party-2 input-share words (little-endian) in circuit
-//! order, then the unopened commitment digest (32). This crate replays the circuit
-//! against that stream via a [ReplaySource] reading a byte cursor — mirroring
-//! `zkboo-harness`'s streaming pipe, but with the channel replaced by the bytes the
-//! host pulled over APDU — and checks the Fiat-Shamir challenges.
-//!
-//! The verifier never sees the witness: the replayer ignores the value passed to
-//! `frontend.input`, so a circuit built with a dummy witness of the correct length
-//! suffices. The public statement output (e.g. the BIP-32 master key/chain code) is
-//! supplied by the caller.
+//! The wire encoding, what the verifier refuses, and the soundness parameter are in
+//! `knowledge/proof-stream.md`.
 
 pub mod statement;
 
@@ -37,7 +27,7 @@ use zkboo::verifier::replay::{
 };
 use zkboo::word::{CompositeWord, Word, Words};
 
-// Fixed crypto choices — must match the device prover.
+// Fixed crypto choices, which must match the device prover.
 type H = Keccak256Hasher;
 type PV = HashPRG<H>;
 type S = [u8; 32];
@@ -105,14 +95,10 @@ impl<'a, 'd> ReplaySource<[u8; 32]> for CursorReplaySource<'a, 'd> {
 // Verification.
 // ---------------------------------------------------------------------------
 
-/// Verifies a streamed proof for `circuit` against the public `expected_output`.
-/// Returns `true` iff the proof is valid and bound to `binding`. A malformed or
-/// truncated stream is treated as invalid (returns `false`), never a panic.
+/// Verifies a streamed proof for a circuit against its public output and binding.
 ///
-/// `num_iters` is part of the statement: soundness error is `(2/3)^num_iters`, so the
-/// caller must pass the response count it *demands* (see [n_eps]), never one derived
-/// from the proof's own length. A zero count would make every check vacuous — an
-/// empty proof would "verify" — so it is refused outright.
+/// 🚨 `num_iters` is part of the statement: pass the response count the verifier
+/// demands, never one derived from the proof's own length.
 pub fn verify_stream<C: Circuit>(
     circuit: &C,
     expected_output: &Words,
@@ -142,8 +128,8 @@ fn verify_stream_inner<C: Circuit>(
     };
 
     let mut challenge_hasher = H::new();
-    // Tagged and length-prefixed binding — must match the prover exactly, so it uses
-    // the library's own tag and framing rather than a second copy of them.
+    // Tagged and length-prefixed with the library's own tag and framing, never a
+    // second copy of them, so that it matches the prover exactly.
     absorb_framed(&mut challenge_hasher, TAG_CHALLENGE, binding);
 
     let mut challenges = PartyVec::new();
@@ -183,11 +169,8 @@ fn verify_stream_inner<C: Circuit>(
         }
     }
 
-    // The stream must be exactly `num_iters` responses — no trailing bytes. Without
-    // this a longer proof verifies under a shorter `num_iters`, i.e. a relayer could
-    // downgrade a 438-response proof to a 3-response one by claiming a smaller count
-    // and leaving the rest unread. (The header bound above already rejects a stream
-    // shorter than the count.)
+    // 🚨 Exactly `num_iters` responses, with no trailing bytes: without this a longer
+    // proof verifies under a shorter count. See knowledge/proof-stream.md.
     if cur.pos != stream.len() {
         return false;
     }
@@ -203,7 +186,7 @@ fn verify_stream_inner<C: Circuit>(
     true
 }
 
-/// Reconstructs the `Words` the device serialized with `proofofseed_circuits::serialize_words`.
+/// Reconstructs the `Words` a device serialised with `serialize_words`.
 fn deserialize_words(b: &[u8]) -> Option<Words> {
     fn take<'a>(b: &'a [u8], p: &mut usize, n: usize) -> Option<&'a [u8]> {
         if *p + n > b.len() {
@@ -233,12 +216,8 @@ fn deserialize_words(b: &[u8]) -> Option<Words> {
     })
 }
 
-/// The serialized public output for `statement` in `family` (a `Family` wire byte),
-/// computed off-device with the shared `proofofseed_circuits` circuits (same encoding the
-/// device's `EXEC` returns). Lets the host obtain the expected output for statements
-/// whose on-device `EXEC` is impractical — the secp256k1 "elephants", whose monolithic
-/// exec trips the OS watchdog. Returns `None` for an unknown statement, family, or a
-/// statement the family does not carry.
+/// The serialised public output of a statement's canonical test vector, computed
+/// off-device.
 pub fn expected_output(statement: u8, rounds: usize, family: u8) -> Option<Vec<u8>> {
     let words = match Family::from_wire(family)? {
         Family::Bip32Secp256k1 => match statement {
@@ -259,21 +238,7 @@ pub fn expected_output(statement: u8, rounds: usize, family: u8) -> Option<Vec<u
     Some(proofofseed_circuits::serialize_words(&words))
 }
 
-/// The public output a curve statement produces for a *given* private key.
-///
-/// [expected_output] executes the canonical test vector, and [seed_statement_output]
-/// covers the statements whose witness is a seed. Neither answers the question a
-/// benchmark asks of the curve statements, whose witness is a key derived from the
-/// device's own seed — so those runs had no expected output and were recorded as
-/// unverified: proofs made and never checked.
-///
-/// This executes the real circuit with the supplied witness rather than recomputing what
-/// the circuit ought to produce. That distinction is not academic: circuit outputs now
-/// carry a trailing assertion word emitted by the backend, and any hand-written copy of
-/// the output format silently omits it and rejects every honest proof.
-///
-/// `chain_code` and `index` are the normal-child statement's public parameters and are
-/// ignored by the others. Returns `None` for a statement that is not a curve statement.
+/// The public output a curve statement produces for a given private key.
 pub fn curve_statement_output(
     statement: u8,
     private_key: &[u8],
@@ -282,9 +247,8 @@ pub fn curve_statement_output(
 ) -> Option<Vec<u8>> {
     use proofofseed_circuits::{AddressCircuit, NormalChildCircuit, PubKeyCircuit};
     let key = private_key.to_vec();
-    // Named with the default table source, exactly as the canonical constructors are:
-    // the source moves neither the output nor the fingerprint (pinned by tests in
-    // `circuits/tests/flash_tables.rs`), but the type parameter has to be pinned somewhere.
+    // The default table source, as the canonical constructors use: the source moves
+    // neither the output nor the fingerprint, but the parameter must be pinned.
     let words = match statement {
         PUBLIC_KEY => {
             let circuit: PubKeyCircuit = PubKeyCircuit::new(key);
@@ -304,21 +268,7 @@ pub fn curve_statement_output(
     Some(proofofseed_circuits::serialize_words(&words))
 }
 
-/// The public output of a hardened-child statement proved against a device-held parent.
-///
-/// The counterpart of [curve_statement_output] for the one remaining statement whose
-/// witness is a key the host cannot compile in: the hardened-child rows of a device
-/// benchmark derive their parent from the device's own seed, so they had no expected
-/// output and were recorded as unverified. A host that holds the same mnemonic derives
-/// the same parent, and this turns that parent into the bytes a verifier expects.
-///
-/// As with the curve statements the output is taken from the circuit's own execution
-/// rather than recomputed, because the backend appends an assertion word that a
-/// hand-written copy of the output framing omits.
-///
-/// `family` is the derivation-family wire byte (0 = BIP-32/secp256k1,
-/// 1 = SLIP-10/ed25519); the two build different circuits. Returns `None` for any other
-/// family, and the SLIP-10 circuit panics on a non-hardened index.
+/// The public output of a hardened-child statement proved against a given parent key.
 pub fn hardened_child_statement_output(
     family: u8,
     parent_priv: &[u8],
@@ -342,23 +292,8 @@ pub fn hardened_child_statement_output(
     Some(proofofseed_circuits::serialize_words(&words))
 }
 
-/// Verifies a streamed proof for the given statement, request-anchored: the
-/// verifier reconstructs the circuit from the *public* parameters it asserts and
-/// checks the proof against the output it expects, never trusting the device's
-/// witness or — for the child statements — the parent chain code.
-///
-/// `output` is the expected serialized public output (the address/public key the
-/// verifier is challenging, or in the dev flow the device's streamed output).
-/// `rounds` is the BIP-39 PBKDF2 round count (ignored by the other statements).
-/// `chain_code` and `index` are the verifier-asserted public parameters of the
-/// hardened/normal child statements; when `None` they fall back to the canonical
-/// test-vector parameters (so existing callers are unchanged). `family` is the
-/// derivation-family wire byte the proof was requested under (0 = BIP-32/secp256k1,
-/// 1 = SLIP-10/ed25519) — the families build different circuits, so a proof made in
-/// one never verifies in the other. The private-key statements (public key, Ethereum
-/// address, all child kinds) reconstruct with a placeholder witness — the ZKBoo
-/// verifier never reads witness values. Returns `false` for an unknown statement or
-/// family, or malformed input.
+/// Verifies a streamed proof for a statement, rebuilding the circuit from the public
+/// parameters the verifier asserts.
 pub fn verify(
     statement: u8,
     output: &[u8],
@@ -376,17 +311,10 @@ pub fn verify(
     )
 }
 
-/// [verify], told the witness *shape* of the seed statements.
+/// [verify], told the witness shape of the seed statements.
 ///
-/// The master-key and BIP-39 statements allocate one circuit input per witness byte, so
-/// their witness length is a public parameter: a proof over a 64-byte BIP-39 seed and one
-/// over the 16-byte BIP-32 test vector are different circuits. A verifier given neither
-/// falls back to the canonical test vector, which is what a stock device proves, and
-/// which is why [verify] was able to look correct while rejecting every real seed proof.
-///
-/// `salt_len` is the length of the BIP-39 PBKDF2 salt, `"mnemonic" ‖ passphrase`. The salt
-/// itself is witness, so a verifier needs only its length — it never learns the
-/// passphrase, only how long it is.
+/// ⚠️ Without the shape a seed proof cannot be verified at all; see
+/// `knowledge/verifier-circuits.md`.
 #[allow(clippy::too_many_arguments)]
 pub fn verify_with_shape(
     statement: u8,
@@ -410,11 +338,8 @@ pub fn verify_with_shape(
         None => return false,
     };
     match (family, statement) {
-        // The seed statements. Their witness *shape* is public — one input word per
-        // byte — so the verifier must be told it, or it rebuilds a structurally
-        // different circuit and rejects every real proof. `witness_len` absent means
-        // the canonical test vector, which is what a stock device proves (its real
-        // seed is unreachable through BOLOS).
+        // The seed statements. An absent `witness_len` means the canonical test
+        // vector, which is what a stock device proves.
         (Family::Bip32Secp256k1, MASTER_KEY) => {
             let circuit = match witness_len {
                 Some(n) => master_key_verify_circuit(n),
@@ -426,13 +351,13 @@ pub fn verify_with_shape(
             let circuit = match (witness_len, salt_len) {
                 (Some(m), Some(sl)) => bip39_seed_verify_circuit(m, sl, rounds),
                 (None, None) => bip39_seed_circuit(rounds),
-                // One length without the other cannot name a circuit: both are public
-                // shape parameters and neither has a default that is safe to assume.
+                // One length without the other cannot name a circuit, and neither has
+                // a default that is safe to assume.
                 _ => return false,
             };
             verify_stream(&circuit, &expected, stream, num_iters, binding)
         }
-        // Child statements: verifier-asserted chain code + index, placeholder witness.
+        // Child statements: asserted chain code and index, placeholder witness.
         (Family::Bip32Secp256k1, HARDENED_CHILD) => {
             let circuit = match (chain_code, index) {
                 (Some(cc), Some(i)) => hardened_child_verify_circuit(cc.to_vec(), i),
@@ -447,7 +372,7 @@ pub fn verify_with_shape(
             };
             verify_stream(&circuit, &expected, stream, num_iters, binding)
         }
-        // Public-key / address statements: no public params, placeholder witness.
+        // Public-key and address statements: no public parameters, placeholder witness.
         (Family::Bip32Secp256k1, PUBLIC_KEY) => verify_stream(
             &public_key_verify_circuit(),
             &expected,
@@ -463,8 +388,8 @@ pub fn verify_with_shape(
             binding,
         ),
         // The SLIP-10/ed25519 family carries only the recovery statements. A
-        // non-hardened asserted index panics in the circuit and is caught by
-        // [verify_stream] as a failed verification.
+        // non-hardened asserted index panics in the circuit, which `verify_stream`
+        // catches as a failed verification.
         (Family::Slip10Ed25519, MASTER_KEY) => {
             let circuit = match witness_len {
                 Some(n) => slip10_master_verify_circuit(n),
@@ -483,13 +408,7 @@ pub fn verify_with_shape(
     }
 }
 
-/// The public output of a seed statement proved against `witness`.
-///
-/// The master-key and BIP-39 statements normally run on a compiled-in test vector,
-/// because a stock secure element cannot reach its own master seed or mnemonic. A prover
-/// handed a witness directly — a software wallet, or a device exercising the statement
-/// with a mock one — produces a different output, and a verifier needs it. `salt` is the
-/// BIP-39 PBKDF2 salt and must be empty for the master-key statement.
+/// The public output of a seed statement proved against a given witness.
 pub fn seed_statement_output(
     statement: u8,
     family: u8,
@@ -514,13 +433,8 @@ pub fn seed_statement_output(
     }
 }
 
-/// The structural fingerprint of the circuit a prover runs for `(family, statement)`,
+/// The structural fingerprint of the circuit a prover runs for a family and statement,
 /// computed with natively recomputed comb tables.
-///
-/// Exposed so a host can compare its own answer with one read back from a device, which
-/// is what establishes that the device compiled the circuit the host thinks it did. See
-/// [proofofseed_circuits::statement_fingerprint] for why the digest is a function of the
-/// public parameters and not of the witness.
 pub fn statement_fingerprint(
     statement: u8,
     rounds: usize,
@@ -538,18 +452,9 @@ pub fn statement_fingerprint(
     )
 }
 
-/// The number of ZKBoo responses (repetitions) needed for `bits` bits of soundness.
+/// The number of ZKBoo responses needed for a given number of bits of soundness.
 ///
-/// A cheating prover survives one repetition with probability 2/3: of the three view
-/// pairs, the verifier opens one, and for a false statement at most two of the three
-/// pairs can be made consistent. `n` independent repetitions therefore leave soundness
-/// error `(2/3)^n`, and `(2/3)^n <= 2^-bits` requires `n >= bits / log2(3/2)`.
-///
-/// The deployment parameter targets 128-bit *post-quantum* soundness: Grover search
-/// over the Fiat-Shamir challenge space gives a quadratic speedup, so the classical
-/// soundness error must be `2^-256` — `n_eps(256) = 438` responses, the whitepaper's
-/// N_epsilon and the only setting these crates use. Lower arguments are meaningful to
-/// the formula but are not deployment parameters here.
+/// The deployment parameter is `n_eps(256) = 438`; see `knowledge/proof-stream.md`.
 pub fn n_eps(bits: u32) -> usize {
     (f64::from(bits) / 1.5f64.log2()).ceil() as usize
 }
@@ -558,10 +463,7 @@ pub fn n_eps(bits: u32) -> usize {
 // Prover-side host harness.
 // ---------------------------------------------------------------------------
 
-/// Host-side prover harness for round-trip validation (tests, examples, future
-/// drivers): generates the canonical proof byte stream the device would emit over
-/// APDU, using the device's crypto suite, so a proof can be produced and verified
-/// entirely off-device.
+/// A host-side prover generating the canonical proof byte stream a device emits.
 pub mod harness {
     use super::*;
     use core::cell::RefCell;
@@ -573,8 +475,7 @@ pub mod harness {
     type PS = HashPRG<H>;
     pub(crate) type WTP = OwnedFlexibleWordTriplePool<RC>;
 
-    /// Prover-side sink that writes the canonical byte stream to a Vec (the same
-    /// encoding the device emits over APDU).
+    /// A sink writing the canonical byte stream to a `Vec`.
     #[derive(Debug)]
     pub(crate) struct VecSink<'a> {
         out: &'a RefCell<Vec<u8>>,
@@ -618,8 +519,7 @@ pub mod harness {
         }
     }
 
-    /// Proves `circuit` with `n` responses and returns the canonical proof byte
-    /// stream (the same encoding the device emits), bound to `binding`.
+    /// Proves a circuit with `n` responses, returning the canonical proof byte stream.
     pub fn gen_stream<C: Circuit>(
         circuit: &C,
         n: usize,
@@ -644,13 +544,8 @@ pub mod harness {
         out.into_inner()
     }
 
-    /// Proves only the responses `[start, end)` of the `n`-response proof of
-    /// `circuit` and returns their byte stream — the ranged path the device runs
-    /// for a range-carrying request, driven by the shared
-    /// `proofofseed_circuits::ranged::build_ranged_proof_hooked`. The challenge phase still
-    /// covers all `n` responses (the Fiat-Shamir challenge is global); with the
-    /// same `seed_entropy`, concatenating the ranges of a partition of `0..n` in
-    /// order reproduces [gen_stream]'s output byte for byte.
+    /// Proves only a half-open range of an `n`-response proof, returning its byte
+    /// stream.
     pub fn gen_stream_range<C: Circuit>(
         circuit: &C,
         n: usize,
@@ -679,21 +574,18 @@ pub mod harness {
         out.into_inner()
     }
 
-    /// The device's serialized public output for `circuit` (plain execution, then
-    /// `proofofseed_circuits::serialize_words`).
+    /// The serialised public output of a circuit.
     pub fn output_of<C: Circuit>(circuit: &C) -> Vec<u8> {
         proofofseed_circuits::serialize_words(&exec_circuit(circuit))
     }
 
-    /// The plain-execution public output of `circuit`, as structured [Words].
+    /// The public output of a circuit, as structured [Words].
     pub fn exec_words<C: Circuit>(circuit: &C) -> Words {
         super::exec_circuit(circuit)
     }
 
-    /// Shared state behind [WriteSink]: the writer, the number of proof bytes
-    /// written, and the first io error (subsequent writes are skipped once an
-    /// error is recorded — the collector API has no error channel, so the caller
-    /// checks after the build).
+    /// Shared state behind [WriteSink]: the writer, the bytes written, and the first
+    /// io error, which the caller checks after the build.
     pub struct SinkState<W: std::io::Write> {
         writer: W,
         bytes: u64,
@@ -731,9 +623,7 @@ pub mod harness {
         }
     }
 
-    /// Prover-side sink streaming the canonical byte encoding (identical to
-    /// [VecSink]'s, i.e. to the device's) into any [std::io::Write] — so proofs
-    /// larger than memory go straight to disk.
+    /// A sink streaming the canonical byte encoding into any [std::io::Write].
     pub struct WriteSink<'a, W: std::io::Write> {
         out: &'a RefCell<SinkState<W>>,
         include_input_share2: bool,
@@ -784,8 +674,7 @@ pub mod harness {
         }
     }
 
-    /// [gen_stream], streamed into a writer instead of a `Vec` — byte-identical
-    /// output, constant memory. Returns the number of proof bytes written.
+    /// [gen_stream], streamed into a writer at constant memory.
     pub fn gen_stream_to<C: Circuit, W: std::io::Write>(
         circuit: &C,
         n: usize,
@@ -796,8 +685,7 @@ pub mod harness {
         gen_stream_range_to(circuit, n, (0, n), seed_entropy, binding, writer)
     }
 
-    /// [gen_stream_range], streamed into a writer instead of a `Vec` —
-    /// byte-identical output, constant memory. Returns the bytes written.
+    /// [gen_stream_range], streamed into a writer at constant memory.
     pub fn gen_stream_range_to<C: Circuit, W: std::io::Write>(
         circuit: &C,
         n: usize,
@@ -828,11 +716,8 @@ pub mod harness {
     }
 }
 
-/// Native derivation of witnesses and public parameters from a BIP-39 mnemonic,
-/// implemented by *executing the statement circuits* through zkboo's plain
-/// executor — the same circuits the proofs are about, so derivation cannot drift
-/// from what is proved, and no third-party wallet code enters the trust path.
-/// All returned key material is [Zeroizing]-wrapped.
+/// Native derivation of witnesses and public parameters from a BIP-39 mnemonic, by
+/// executing the statement circuits through zkboo's plain executor.
 pub mod derive {
     use super::harness::exec_words;
     use proofofseed_circuits::{
@@ -845,14 +730,13 @@ pub mod derive {
 
     const HARDENED: u32 = 0x8000_0000;
 
-    /// A derived tree node: private key (32 bytes, big-endian) and chain code.
+    /// A derived tree node: a big-endian private key and a chain code.
     pub struct Node {
         pub private_key: Zeroizing<[u8; 32]>,
         pub chain_code: [u8; 32],
     }
 
-    /// The BIP-39 seed of `mnemonic` under `passphrase` (empty for none), via the
-    /// full 2048-round PBKDF2 circuit.
+    /// The BIP-39 seed of a mnemonic under a passphrase.
     pub fn bip39_seed(mnemonic: &[u8], passphrase: &[u8]) -> Zeroizing<Vec<u8>> {
         let mut salt = b"mnemonic".to_vec();
         salt.extend_from_slice(passphrase);
@@ -867,13 +751,9 @@ pub mod derive {
         seed
     }
 
-    /// Splits a BIP-32 master/child circuit output into a [Node]. The child
-    /// circuits emit the key as four little-endian-ordered u64 limbs; the master
-    /// emits plain bytes.
+    /// Splits a BIP-32 master or child circuit output into a [Node].
     fn bip32_node_of(words: Words) -> Node {
-        // The assertion word is checked and removed before anything is sliced: it is a
-        // u8 and therefore sits at the end of `u8` for the master statement, whose
-        // payload is bytes, *and* for the child statements, whose payload is u64 limbs.
+        // 🚨 The assertion word is checked and removed before anything is sliced.
         let mut words = checked_payload(words)
             .expect("a BIP-32 derivation step asserted a non-finite public key");
         let mut private_key = Zeroizing::new([0u8; 32]);
@@ -892,9 +772,7 @@ pub mod derive {
         Node { private_key, chain_code }
     }
 
-    /// Walks the BIP-32/secp256k1 tree from `seed` down `path` (hardened bit set
-    /// per component), executing the master, hardened-child and normal-child
-    /// circuits.
+    /// Walks the BIP-32/secp256k1 tree from a seed down a path.
     pub fn bip32_node(seed: &[u8], path: &[u32]) -> Node {
         let mut node = bip32_node_of(exec_words(&MasterKeyCircuit { seed: seed.to_vec() }));
         for &index in path {
@@ -916,9 +794,8 @@ pub mod derive {
         node
     }
 
-    /// Walks the SLIP-10/ed25519 tree from `seed` down `path`. Every component
-    /// must be hardened (SLIP-10 ed25519 defines nothing else); returns `None`
-    /// for a non-hardened component.
+    /// Walks the SLIP-10/ed25519 tree from a seed down a path, every component of
+    /// which must be hardened.
     pub fn slip10_node(seed: &[u8], path: &[u32]) -> Option<Node> {
         let words = exec_words(&Slip10MasterCircuit { seed: seed.to_vec() });
         let mut node = slip10_node_of(words);
@@ -968,10 +845,8 @@ mod tests {
 
     type PS = HashPRG<H>;
 
-    /// A challenge-phase collector mirroring the app's `ChallengeKeepalive`: it relays
-    /// the genuine commitments via [ViewCommitmentsRelayer] and counts the per-AND-gate
-    /// `push_and_msgs` calls (where the device would fire a watchdog keepalive), but
-    /// feeds no hasher — so it must be transcript-neutral.
+    /// A challenge-phase collector mirroring the app's `ChallengeKeepalive`, which
+    /// relays the genuine commitments and counts AND-gate calls without feeding a hasher.
     #[derive(Debug)]
     struct CountingRelayer {
         inner: ViewCommitmentsRelayer<[u8; 32], [u8; 32]>,
@@ -1000,8 +875,7 @@ mod tests {
         }
     }
 
-    /// Like [gen_stream], but drives the challenge phase through [CountingRelayer] via
-    /// `next_iter_custom` instead of the default `next_iter`.
+    /// [gen_stream], driving the challenge phase through [CountingRelayer].
     fn gen_stream_custom_challenge<C: Circuit>(
         circuit: &C,
         n: usize,
@@ -1026,9 +900,8 @@ mod tests {
         out.into_inner()
     }
 
-    /// A custom challenge-phase collector that only observes the relayed AND-message
-    /// stream must not perturb the Fiat-Shamir challenge, so the emitted proof bytes are
-    /// identical to the default-relayer path and still verify.
+    /// An observing challenge-phase collector leaves the emitted proof bytes identical
+    /// to the default-relayer path.
     fn assert_challenge_collector_neutral<C: Circuit>(stmt: u8, c: C) {
         let default = gen_stream(&c, 5, b"e", b"bind");
         let custom = gen_stream_custom_challenge(&c, 5, b"e", b"bind");

@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-//! Profiles the proof-of-seed statements for on-device (Ledger) memory budgeting.
+//! Profiles the proof-of-seed statements for on-device memory budgeting: refcount
+//! widths, working-set heap at each width, and state sizes.
 //!
-//! Prints, per circuit, the max individual refcount (does `RC = u8` overflow 255?),
-//! the executor/prover working-set heap at each refcount width, and state sizes.
-//!
-//! Run: `cargo run --release -p zkboo-bip32 --example profile_seed_statements`
+//! Run: `cargo run --release -p proofofseed-host --example profile_seed_statements`
 
 use zkboo::backend::{Backend, Frontend};
 use proofofseed_circuits::assert_nothing;

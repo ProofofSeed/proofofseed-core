@@ -1,17 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-//! The fingerprinting pass, hooked.
-//!
-//! A ranged proof binds its prover entropy to the circuit's structural fingerprint, and
-//! computing that fingerprint means executing the whole circuit through a hashing
-//! backend before the prover emits its first byte. On a secure element the pass must
-//! service the OS watchdog while it runs, which means wrapping it in a hook — and a hook
-//! that changed the digest would change the derived entropy, so the two paths have to
-//! agree byte for byte.
-//!
-//! Both halves are checked here, because either alone would pass for the wrong reason: a
-//! hook that never fired would agree with the unhooked path trivially, and a hook that
-//! fired but perturbed the hasher would be caught only by the comparison.
+//! The hooked fingerprinting pass fires its hook and produces the unhooked digest.
 
 use core::cell::Cell;
 

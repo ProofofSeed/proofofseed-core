@@ -1,25 +1,12 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 //
-//! Off-device proof-size estimator. Generates the streamed proof for each statement
-//! (host CPU, no device) and reports bytes per response, then predicts the on-device
-//! runtime from the device's measured streaming rate. Proof size is deterministic in the
-//! circuit and independent of the seed, so this predicts device timing.
+//! Off-device proof-size estimator: the streamed proof size per statement, and the
+//! device streaming time it predicts.
 //!
-//! 🔴 The ~1.9 KB/s this used to divide by is **retracted**: its timer spanned the consent
-//! prompt, so it measured the operator as much as the device.
+//! ⚠️ The streaming phase only, and the rate is a property of the statement rather than
+//! of the device; see `knowledge/measurement-instruments.md`.
 //!
-//! 🔴 The single mean that replaced it is also gone. Re-measured on 2026-09-09 over 42 further
-//! verified rows, the streaming rate is flat in witness size, response count and proof size but
-//! **not in statement**: the hash statements run at 3,171–3,367 B/s and the curve statements at
-//! 3,527–3,547 B/s, with no overlap. The old band was their union and its mean belonged to
-//! neither, so a projection using it was ~8% optimistic on a curve statement
-//! (`whitepaper/on-device-measurements.md`).
-//!
-//! It still predicts the *streaming* phase only. The byte-silent challenge phase is a
-//! further ~44% of device work on the curve statements and ~30–45% on the others, so a
-//! figure here is a floor on the device's total, not an estimate of it.
-//!
-//!     cargo run -p proofofseed-host --example proof_size --release
+//! Run: `cargo run --release -p proofofseed-host --example proof_size`
 
 use core::cell::RefCell;
 
@@ -43,9 +30,8 @@ type S = [u8; 32];
 type RC = usize;
 type WTP = OwnedFlexibleWordTriplePool<RC>;
 
-/// A sink that only counts the bytes the device would stream (same framing as the
-/// app: per response 1 + 32 + 32 header, each AND-message / input-share word, 32-byte
-/// digest), without storing them.
+/// A sink counting the bytes the device would stream, in the app's framing, without
+/// storing them.
 #[derive(Debug)]
 struct CountSink<'a> {
     out: &'a RefCell<usize>,
@@ -100,20 +86,20 @@ fn proof_size<C: Circuit>(circuit: &C, n: usize) -> usize {
     total.into_inner()
 }
 
-/// Mean streamed bytes per second on the Flex, for a statement without curve arithmetic.
-/// Over 36 verified rows spanning 3,171–3,367 B/s.
+/// Mean streamed bytes per second on the Flex for a statement without curve arithmetic,
+/// over 36 verified rows spanning 3,171–3,367 B/s (2026-09-09).
 const HASH_RATE: f64 = 3279.0;
 
-/// Mean streamed bytes per second on the Flex, for a statement with curve arithmetic.
-/// Over 6 verified rows spanning 3,527–3,547 B/s, which do not overlap the hash rows.
+/// Mean streamed bytes per second on the Flex for a statement with curve arithmetic,
+/// over 6 verified rows spanning 3,527–3,547 B/s that do not overlap the hash rows
+/// (2026-09-09).
 const CURVE_RATE: f64 = 3532.0;
 
 fn main() {
     println!(
         "statement           bytes/response   streaming s/response (excludes the challenge phase)"
     );
-    // The rate to divide by is a property of the statement, not of the device: dividing a
-    // curve statement's bytes by the hash rate understates it by about 8%.
+    // ⚠️ The rate is a property of the statement, not of the device.
     let rows: [(&str, usize, f64); 6] = [
         ("master_key", proof_size(&master_key_circuit(), 1), HASH_RATE),
         ("hardened_child", proof_size(&hardened_child_circuit(), 1), HASH_RATE),

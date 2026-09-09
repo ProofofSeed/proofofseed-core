@@ -1,17 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-//! Where the assertion word lands in a circuit's outputs, and what happens to code that
-//! does not know it is there.
-//!
-//! Every statement circuit emits, as its last output word, the conjunction of the
-//! in-circuit assertions it made. zkboo emits that word only where a circuit opens an
-//! assertion scope, so the uniformity is this suite's own discipline: a statement with
-//! nothing to assert ends in `assert_nothing`, and this test is what makes forgetting
-//! that go red rather than silent. It is a `u8`, so it lands at the end of `Words::u8` —
-//! including for the curve statements, whose payload is entirely `u64` and whose `u8`
-//! section therefore holds *nothing but* the assertion word. Code that slices the raw
-//! outputs reads it as payload, and the failure is silent: a 64-byte BIP-39 seed reads as
-//! 65 bytes and every key derived from it belongs to a different wallet.
+//! Where the assertion word lands in a circuit's outputs, and what happens to code
+//! that slices the raw words instead of stripping it.
 
 use proofofseed_circuits::comb::ComputedComb;
 use proofofseed_circuits::{
@@ -74,5 +64,5 @@ fn the_serialized_statement_keeps_the_assertion_word() {
     let serialized = serialize_words(&words);
     let u8_len = u16::from_be_bytes([serialized[0], serialized[1]]) as usize;
     assert_eq!(u8_len, 65, "serialized u8 section length");
-    assert_eq!(serialized[2 + u8_len - 1], ASSERTION_TRUE, "assertion word survives serialization");
+    assert_eq!(serialized[2 + u8_len - 1], ASSERTION_TRUE, "assertion word survives serialisation");
 }

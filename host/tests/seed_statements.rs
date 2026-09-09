@@ -1,23 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-//! The two seed statements, against witnesses of realistic shape.
-//!
-//! Both allocate one circuit input per witness byte, so the witness *length* is a
-//! public parameter: a proof over a 64-byte BIP-39 seed and one over the 16-byte BIP-32
-//! test vector are structurally different circuits. A verifier told neither rebuilds the
-//! test-vector circuit and rejects the proof.
-//!
-//! That is not hypothetical. Until these tests existed, the verifier had no way to be
-//! told, so it always rebuilt the test-vector circuit: the standalone prover would
-//! happily produce a master-key or BIP-39 proof of a real seed that **could never
-//! verify**, and nothing said so. The negatives below are what keep that from returning
-//! — each is paired with the positive that shows the difference is the shape and not
-//! some unrelated breakage.
-//!
-//! The BIP-39 salt is witness, so a verifier is told only its *length*. It used to be a
-//! public circuit constant, which published the user's passphrase to whoever verified the
-//! proof; the wrong-length negative below is what keeps the length from being guessed
-//! instead of stated.
+//! The two seed statements against witnesses of realistic shape, with a negative per
+//! shape parameter and its positive twin.
 
 use proofofseed_circuits::{
     BIP39_SEED, MASTER_KEY, MasterKeyCircuit, SeedCircuit, Slip10MasterCircuit, bip39_salt_for,

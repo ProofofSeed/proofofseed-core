@@ -1,15 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-//! SLIP-10/ed25519 (family 1) recovery-statement validation, entirely off-device.
-//!
-//! Anchors the shared family-1 circuits (`proofofseed_circuits`) against the official
-//! SLIP-0010 ed25519 test vectors — private key AND chain code at every node of both
-//! published chains — and against Solana wallet practice via the trust-wallet-core
-//! vector (mnemonic → BIP-39 seed → SLIP-10 chain at m/44'/501'/0' → RFC 8032 public
-//! key → the published address). Round trips then prove and verify the family-1
-//! statements in the device configuration, with the wrong-chain-code / wrong-index /
-//! wrong-binding / non-hardened-index refusals, and the cross-family negatives: a
-//! proof made in one family never verifies in the other, in either direction.
+//! SLIP-10/ed25519 recovery-statement validation, off-device, against the SLIP-0010
+//! vectors and Solana wallet practice, with the refusals and the cross-family negatives.
 
 use proofofseed_circuits::{
     EXPECTED_SLIP10_CHILD, EXPECTED_SLIP10_MASTER, HARDENED_CHILD, MASTER_KEY, PUBLIC_KEY,

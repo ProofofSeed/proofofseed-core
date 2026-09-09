@@ -1,18 +1,9 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-//! What it would cost to stop publishing the BIP-39 passphrase.
+//! What it costs to supply the BIP-39 PBKDF2 salt as witness rather than as public
+//! circuit constants, isolated to the one HMAC whose message it is.
 //!
-//! The BIP-39 statement's PBKDF2 salt is `"mnemonic" ‖ passphrase`, and the circuit
-//! allocates it as *constants* (`zkboo-bip32/src/seed.rs`: `salt.iter().map(|&b|
-//! allocator.alloc(b))`). Constants are public circuit parameters — a verifier needs them
-//! to rebuild the circuit — so proving this statement under a passphrase discloses the
-//! passphrase.
-//!
-//! Making the salt witness moves those bytes from `alloc` to `input`. The salt appears
-//! only in the *message* of the first HMAC (the key is the mnemonic, already secret), so
-//! this isolates exactly that: one HMAC, secret key, message either constant or secret.
-//! Everything else about the statement — 2048 rounds of HMAC over secret data — is
-//! identical between the two and would swamp the difference if measured whole.
+//! Run: `cargo run --release -p proofofseed-host --example salt_secrecy_cost`
 
 use zkboo::backend::{Backend, Frontend};
 use proofofseed_circuits::assert_nothing;

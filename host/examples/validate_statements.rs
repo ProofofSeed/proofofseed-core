@@ -1,15 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-//! The prover's peak heap for each statement, with the on-device refcount type, measured
-//! through a tracking global allocator — which is why this is an example rather than a
-//! test: the counter is process-wide, so tests running in parallel would read each
-//! other's allocations.
-//!
-//! The output checks it also prints are a convenience view of what
-//! `circuits/tests/statement_outputs.rs` asserts. They used to live *only* here, which is
-//! how five of the six came to be failing, unnoticed, from the day ZKBoo 2.0.0 appended
-//! the assertion word: nothing ran them. This binary now exits non-zero when one
-//! mismatches, so a stale expectation cannot be read past.
+//! The prover's peak heap for each statement, through a tracking global allocator, with
+//! a convenience view of the output checks `circuits/tests/statement_outputs.rs` asserts.
 //!
 //! Run: `cargo run --release -p proofofseed-host --example validate_statements`
 

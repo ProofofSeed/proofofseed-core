@@ -1,17 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-//! Ranged-proving validation, entirely off-device.
-//!
-//! The properties that make ranges resumable, retriable and device-parallel:
-//! the shared ranged builder is byte-identical to zkboo's canonical builder over
-//! the full range; concatenating the ranges of any partition of `0..n`, produced
-//! in independent runs under the same deterministic entropy, reassembles exactly
-//! the canonical proof and verifies; a lone range is not accepted as a complete
-//! proof; and the deterministic entropy derivation is stable across runs, blind
-//! to the range (ranges of one proof must share it), and sensitive to every
-//! challenge-relevant input (statement, family, response count, rounds, binding,
-//! witness, circuit) so re-runs can never pair one run's view seeds with a
-//! different run's challenge.
+//! Ranged proving, off-device: byte-equality with the canonical builder, reassembly of
+//! any partition, refusal of a lone range, and the entropy derivation's sensitivities.
 
 use proofofseed_circuits::ranged::{
     WitnessMaterial, deterministic_seed_entropy, ranged_request_digest, request_transcript_digest,

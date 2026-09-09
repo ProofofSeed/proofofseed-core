@@ -1,39 +1,37 @@
 # proofofseed-core
 
-The shared proof-of-seed library: the ZKBoo statement circuits (BIP-32/secp256k1 and SLIP-10/ed25519 families), the request/proof-identity transcript with ranged deterministic-entropy proving, and the host-side prover/verifier — consumed by the Ledger app, the standalone `proofofseed` CLI, and the `proofofseed` Python package.
-
-**Status: this is the single implementation of the statements.** The extraction from `../ledger-app` is complete and so is the consumer switch: the device app depends on `proofofseed-circuits` and its host shim on `proofofseed-host`, with no copy of either surviving in that repo, and `../rust-app` and `../python-app` consume the same crates. A change here reaches the device app, the CLI and the Python package at once, so all four are built before one is called done. The plan of record — architecture, milestones and their acceptance tests — is [`knowledge/plan.md`](knowledge/plan.md).
-
-## Reading a circuit's outputs
-
-Every statement circuit emits, as its **last output word**, the conjunction of the in-circuit assertions it made. It is a `u8`, so it is the last element of `Words::u8` whatever widths the payload uses — for the curve statements the payload is entirely `u64` and the `u8` section holds nothing but the assertion word. A statement that asserts nothing emits the constant one, so the shape is the same across the suite.
-
-The word is the circuit's own, not the backend's, and **the uniformity is this suite's discipline rather than the library's**: zkboo emits the word only where a circuit opens an `Assertions::scope`, so a circuit that asserts nothing has to open an empty one — `assert_nothing(frontend)` — or lose the word silently and leave a caller stripping it to eat a payload byte instead. Every `exec` here ends in a scope, and any new circuit must too. `circuits/tests/assertion_word.rs` is what makes forgetting go red.
-
-**Read outputs through `proofofseed_circuits::checked_payload`, never raw.** It removes the word and returns `None` when it is false. Slicing the raw outputs takes the assertion word for payload, and the failure is silent rather than loud: a 64-byte BIP-39 seed reads as 65 bytes, and every key derived from it belongs to a different wallet.
-
-The serialized form a verifier pins (`serialize_words`) **keeps** the word — it is part of what the proof commits to. Only a caller consuming outputs as values wants it removed.
+The shared proof-of-seed library: the ZKBoo statement circuits for the BIP-32/secp256k1 and SLIP-10/ed25519 derivation families, the request and proof-identity transcript with ranged deterministic-entropy proving, and the host-side prover and verifier.
+It is the single implementation of the statements, consumed by the ProofofSeed Ledger app, the standalone `proofofseed` command-line tool, and the `proofofseed` Python package, so a change here reaches all three at once.
 
 ## Build and test
 
-    cargo test --release --workspace
+```sh
+cargo test --release --workspace
+```
 
-Debug and sequential builds are impractical for these circuits; use `--release`. The suite includes the statement outputs against their canonical vectors, the circuit fingerprints, the request vectors, the ranged-proving transcript, and a proof-byte pin (`host/tests/golden_streams.txt`) that fails when proof bytes move for any reason — deliberate or not.
+Debug and sequential builds are impractical for these circuits.
+The suite covers the statement outputs against their canonical vectors, the circuit fingerprints, the request vectors, the ranged-proving transcript, and a proof-byte pin (`host/tests/golden_streams.txt`) that fails when proof bytes move for any reason.
 
-Soundness default is **438 responses** (`(2/3)^438 ≤ 2^-256`, 128-bit post-quantum) throughout this repo and its consumers.
+The soundness default is 438 responses throughout this repository and its consumers: `(2/3)^438 <= 2^-256`, 128-bit post-quantum.
+
+## Reading a circuit's outputs
+
+Every statement circuit emits, as its last output word, the conjunction of the in-circuit assertions it made.
+Read outputs through `proofofseed_circuits::checked_payload`, never by slicing the raw words: slicing takes the assertion word for payload, and a 64-byte BIP-39 seed then reads as 65 bytes with every key derived from it belonging to a different wallet.
+The uniform output shape this relies on is the suite's own discipline rather than the library's, so every `exec` here ends in an assertion scope and the ones with nothing to assert end in `assert_nothing`.
+See [`knowledge/assertion-word.md`](knowledge/assertion-word.md).
 
 ## Structure
 
-- `circuits/` — `proofofseed-circuits`: the statement circuits for both derivation families, the request format, ranged proving with deterministic entropy, and the fixed-base comb table source (`no_std + alloc`).
-- `host/` — `proofofseed-host`: the streaming verifier, the host prover (full and ranged), executor-based witness derivation, statement plumbing shared by every frontend, and the profiling/measurement examples.
-- `knowledge/` — design records, starting with the plan of record.
+- `circuits/` — `proofofseed-circuits`: the statement circuits for both derivation families, the request format, ranged proving with deterministic entropy, the proof hash, and the fixed-base comb table sources (`no_std + alloc`).
+- `host/` — `proofofseed-host`: the streaming verifier, the host prover (full and ranged), executor-based witness derivation, the statement plumbing shared by every frontend, and the profiling and measurement examples.
+- `knowledge/` — design records, indexed in [`knowledge/README.md`](knowledge/README.md).
 
 ## Dependencies
 
-The `zkboo` crates (the underlying MPC-in-the-Head proof system) at **1.2.0**, resolved to the local working trees under `<zkboo>` by the workspace's `[patch.crates-io]`. That release is not on crates.io yet; every earlier published version is yanked.
-
-The proof hash is Keccak-256, and it is **ours to supply**: `zkboo` defines the `Hasher` trait and ships no concrete hash. `proofofseed_circuits::hasher::Keccak256Hasher` is where the ecosystem makes that choice, once, so the device, the CLI and the Python package cannot drift apart on it.
-
-⚠️ A `[patch.crates-io]` entry is ignored **in silence** once the local crate's version stops satisfying the requirement, and cargo resolves the published crate instead with no warning. When the zkboo crates take a major version, every requirement here and in all three consumers has to move with them, or the graph ends up holding two incompatible copies.
+The `zkboo` crates at 1.2.0, resolved to the local working trees under `<zkboo>` by the workspace's `[patch.crates-io]`.
+That release is not on crates.io yet, and every earlier published version is yanked.
+The proof hash is Keccak-256 and is this ecosystem's to supply, in `proofofseed_circuits::hasher`.
+See [`knowledge/dependencies.md`](knowledge/dependencies.md), which records why a patch table can disengage in silence.
 
 Licensed LGPL-3.0-or-later; every source file carries an SPDX header.
