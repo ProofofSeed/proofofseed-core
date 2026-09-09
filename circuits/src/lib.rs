@@ -1,13 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-//! The six ProofofSeed statements as ZKBoo circuits, each paired with a canonical
-//! BIP-32/BIP-39 test vector.
-//!
-//! The same circuit definition is used by the on-device prover and the host
-//! verifier, so they cannot drift. The verifier ignores witness *values* (it
-//! replays from the proof), but the *public* parameters baked into a circuit — the
-//! chain code, derivation index, PBKDF2 salt and round count — must match; sharing
-//! one constructor per statement guarantees that.
+//! The ProofofSeed statements as ZKBoo circuits, each paired with a canonical test
+//! vector, and the verifier-side constructors that rebuild them from public parameters.
 
 #![no_std]
 extern crate alloc;
@@ -42,15 +36,14 @@ pub const PUBLIC_KEY: u8 = 3;
 pub const NORMAL_CHILD: u8 = 4;
 pub const ETH_ADDRESS: u8 = 5;
 
-/// Whether a statement needs secp256k1 scalar multiplication (and is therefore an
-/// "elephant": ~1 GiB per response rather than ~58 KiB).
+/// Whether a statement needs secp256k1 scalar multiplication.
 pub fn is_elephant(statement: u8) -> bool {
     matches!(statement, PUBLIC_KEY | NORMAL_CHILD | ETH_ADDRESS)
 }
 
-/// Serializes a circuit's public output (the statement) for transport to the host:
-/// `u8_len(2) ‖ u8 bytes ‖ u32_len(2) ‖ u32 words (LE) ‖ u64_len(2) ‖ u64 words (LE)`,
-/// all lengths big-endian. The host reconstructs the matching `Words` to verify against.
+/// Serialises a circuit's public output for transport to the host, as
+/// `u8_len(2) ‖ u8 bytes ‖ u32_len(2) ‖ u32 words (LE) ‖ u64_len(2) ‖ u64 words (LE)`
+/// with big-endian lengths.
 pub fn serialize_words(w: &Words) -> Vec<u8> {
     let mut out = Vec::new();
     out.extend_from_slice(&(w.u8.len() as u16).to_be_bytes());
@@ -69,31 +62,11 @@ pub fn serialize_words(w: &Words) -> Vec<u8> {
 /// The value the assertion word carries when every in-circuit assertion held.
 pub const ASSERTION_TRUE: u8 = 1;
 
-/// Splits a circuit's execution outputs into the payload and its assertion word.
+/// Removes a circuit's trailing assertion word, returning the payload only when every
+/// assertion held.
 ///
-/// Every statement circuit here emits, as its **last** output word, the conjunction of
-/// the in-circuit assertions it made (`zkboo::circuit::Assertions`). That word is a
-/// `u8`, so it is the last element of `Words::u8` whatever widths the payload itself
-/// uses — including for the curve statements, whose payload is entirely `u64`.
-///
-/// zkboo emits the word only where a circuit opens an assertion scope, so the uniform
-/// shape this function relies on is **the suite's own discipline, not the library's**:
-/// a statement that asserts nothing ends in [assert_nothing] and emits the constant
-/// one, and a new circuit that forgets to will lose a payload byte here. Uniformity is
-/// what lets a consumer strip the word without knowing which statements assert.
-///
-/// Returns `None` when the word is not [ASSERTION_TRUE]: the execution's assertions did
-/// not hold, and what remains is not a derivation result. A secp256k1 scalar of zero is
-/// the reachable case — the comb asserts that `d·G` is finite, and no proof of a
-/// violated assertion verifies.
-///
-/// Slicing the raw outputs instead reads the assertion word as payload, and the failure
-/// is silent rather than loud: a 64-byte BIP-39 seed reads as 65 bytes, the master key
-/// derived from it is some other wallet's, and the proof about it still verifies.
-///
-/// The serialized form a verifier pins ([serialize_words]) **keeps** the assertion word;
-/// it is part of what the proof commits to. Only a caller consuming the outputs as
-/// values — a derivation walk — wants it removed.
+/// 🚨 The only correct way to read a circuit's outputs as values; see
+/// `knowledge/assertion-word.md`.
 pub fn checked_payload(mut words: Words) -> Option<Words> {
     let assertion = words.u8.pop()?;
     (assertion == ASSERTION_TRUE).then_some(words)
@@ -142,12 +115,6 @@ fn scalar_of(private_key: &[u8]) -> CompositeWord<u64, 4> {
 }
 
 /// Emits the trailing assertion word of a circuit that asserts nothing.
-///
-/// zkboo emits the word only where a circuit opens an assertion scope, so a statement
-/// with nothing to assert would otherwise have no word at all and [checked_payload]
-/// would strip a payload byte from it. Every circuit in this suite therefore ends in a
-/// scope, and this is the empty one: the accumulator finishes as the constant one, which
-/// costs a single output word — no AND gate, no input share.
 pub fn assert_nothing<B: Backend>(frontend: &Frontend<B>) {
     Assertions::scope(frontend, |_| {});
 }
@@ -156,9 +123,7 @@ pub fn assert_nothing<B: Backend>(frontend: &Frontend<B>) {
 // Circuits (each mirrors its zkboo-bip32 test wrapper).
 // ---------------------------------------------------------------------------
 
-/// Volatile-zeroes each named secret field when the circuit is dropped, so witness
-/// key material does not linger in freed memory after proving (or after a refused
-/// request). Public parameters (chain codes, salts, indices) are left alone.
+/// Volatile-zeroes each named secret field when the circuit is dropped.
 macro_rules! zeroize_on_drop {
     ($circuit:ident: $($secret:ident),+) => {
         impl Drop for $circuit {
@@ -167,8 +132,7 @@ macro_rules! zeroize_on_drop {
             }
         }
     };
-    // The elliptic-curve circuits carry a comb-table source parameter; they still
-    // zeroize exactly the same fields.
+    // The elliptic-curve circuits carry a comb-table source parameter.
     (<$g:ident> $circuit:ident: $($secret:ident),+) => {
         impl<$g: $crate::comb::CombTableSource> Drop for $circuit<$g> {
             fn drop(&mut self) {
@@ -222,9 +186,8 @@ impl Circuit for HardenedChildCircuit {
     }
 }
 
-/// BIP-32 normal (non-hardened) child key (needs secp256k1). Output as hardened.
-///
-/// Generic over where the fixed-base comb reads its window tables; see [comb].
+/// BIP-32 normal (non-hardened) child key, generic over the comb's table source.
+/// Output: 4 u64 (child key) + 32 u8 (chain code).
 pub struct NormalChildCircuit<T: CombTableSource = ComputedComb> {
     pub chain_code: Vec<u8>,
     pub parent_priv: Vec<u8>,
@@ -280,20 +243,8 @@ impl<T: CombTableSource> Circuit for NormalChildCircuit<T> {
     }
 }
 
-/// BIP-39 seed via PBKDF2-HMAC-SHA512. Output: 64 u8.
-///
-/// **The salt is witness, not a public parameter.** The BIP-39 salt is
-/// `"mnemonic" ‖ passphrase`, and a verifier needs every public circuit constant to
-/// rebuild the circuit — so allocating the salt, as this statement once did, published
-/// the user's passphrase to whoever verified the proof. Supplying it as witness costs
-/// one byte per salt byte per response (~20 B on a 52 MB response; see
-/// `examples/salt_secrecy_cost.rs`) and discloses only the salt's *length*.
-///
-/// What that gives up is the verifier's certainty that the salt's first eight bytes
-/// spell `"mnemonic"`. Nothing rests on it: a prover using some other eight-byte salt
-/// derives a different seed, and the seed is pinned by whatever consumes it, while
-/// PBKDF2 is one-way so it cannot be steered to a target. The length still separates
-/// "no passphrase" (8 B) from "passphrase" in practice.
+/// BIP-39 seed via PBKDF2-HMAC-SHA512, with the salt as witness rather than a public
+/// parameter. Output: 64 u8.
 pub struct SeedCircuit {
     pub mnemonic: Vec<u8>,
     pub salt: Vec<u8>,
@@ -316,9 +267,8 @@ impl Circuit for SeedCircuit {
     }
 }
 
-/// secp256k1 public key `d·G`. Output: 8 u64 (affine x ‖ y, 4 limbs each).
-///
-/// Generic over where the fixed-base comb reads its window tables; see [comb].
+/// secp256k1 public key `d·G`, generic over the comb's table source.
+/// Output: 8 u64 (affine x ‖ y, 4 limbs each).
 pub struct PubKeyCircuit<T: CombTableSource = ComputedComb> {
     pub private_key: Vec<u8>,
     mirror_scalar: bool,
@@ -353,11 +303,6 @@ impl<T: CombTableSource> Circuit for PubKeyCircuit<T> {
                 .collect::<Vec<_>>();
             let scalar = be_bytes_to_word(&bytes);
             let mut tables = T::make();
-            // The comb accumulates in affine coordinates and hands back (x, y) already,
-            // so these are the coordinates it produced. Wrapping them into a Jacobian
-            // point and converting back — which is all `public_key_with_tables` does —
-            // costs a field inversion and three multiplications to arrive at the values
-            // already in hand.
             let (x, y) = public_key_affine_with_tables(
                 frontend,
                 scalar,
@@ -371,9 +316,7 @@ impl<T: CombTableSource> Circuit for PubKeyCircuit<T> {
     }
 }
 
-/// SLIP-10 ed25519 master key and chain code from a seed (the `"ed25519 seed"`
-/// HMAC constant — the family-1 counterpart of [MasterKeyCircuit]). Output: 64 u8
-/// (IL ‖ IR).
+/// SLIP-10 ed25519 master key and chain code from a seed. Output: 64 u8 (IL ‖ IR).
 pub struct Slip10MasterCircuit {
     pub seed: Vec<u8>,
 }
@@ -389,13 +332,8 @@ impl Circuit for Slip10MasterCircuit {
     }
 }
 
-/// SLIP-10 ed25519 hardened child key (the family-1 counterpart of
-/// [HardenedChildCircuit]; SLIP-10 ed25519 has no other kind). The child key is
-/// `I_L` directly — no curve arithmetic anywhere, so this is a pure-HMAC circuit.
-/// `index` is the wire value and MUST carry the hardened bit (the device dispatch
-/// and the verifier constructor enforce this; `exec` asserts it, which the host
-/// verifier converts into a failed verification). Output: 64 u8 (child key ‖ chain
-/// code).
+/// SLIP-10 ed25519 hardened child key, whose `index` is the wire value and must carry
+/// the hardened bit. Output: 64 u8 (child key ‖ chain code).
 pub struct Slip10ChildCircuit {
     pub chain_code: Vec<u8>,
     pub parent_priv: Vec<u8>,
@@ -422,9 +360,8 @@ impl Circuit for Slip10ChildCircuit {
     }
 }
 
-/// Ethereum address `Keccak256(d·G)[12:]`. Output: 20 u8.
-///
-/// Generic over where the fixed-base comb reads its window tables; see [comb].
+/// Ethereum address `Keccak256(d·G)[12:]`, generic over the comb's table source.
+/// Output: 20 u8.
 pub struct AddressCircuit<T: CombTableSource = ComputedComb> {
     pub private_key: Vec<u8>,
     mirror_scalar: bool,
@@ -520,57 +457,27 @@ pub fn ethereum_address_circuit() -> AddressCircuit {
 }
 
 // ---------------------------------------------------------------------------
-// Verifier-side constructors (request-anchored real-witness proofs).
-//
-// The ZKBoo verifier replays the two opened parties from the proof and never
-// reads the witness *values* — only the witness *length* (one circuit input per
-// byte) and the *public* circuit constants must match the prover's. So a host
-// can verify a proof of the device's real seed knowing only the public params it
-// asserts and the fixed witness length, with a zeroed placeholder witness. This
-// is the verifier half of the request-anchored protocol in docs/real-witness.md;
-// the prover half builds the same struct with the real derived witness (the
-// fields are public, so the device constructs it directly once it derives the
-// secret). The master-seed and BIP-39 statements are not request-anchored (their
-// witness is unreachable on a stock device) and keep their test-vector form.
-//
-// The curve statements need one thing more than a placeholder witness. Their comb
-// derives one chord slope per window from the secret scalar, which a verifier cannot
-// compute and does not need: the slopes are witness values, and a replayed view
-// discards them as it discards every other input value. So these constructors use
-// `shaped`, which hands the comb no scalar to follow; `new` hands it the real one and
-// belongs to a prover. The two build the same circuit, gate for gate — only where a
-// slope's value comes from differs — so their fingerprints agree.
+// Verifier-side constructors. See knowledge/verifier-circuits.md.
 // ---------------------------------------------------------------------------
 
-/// secp256k1 private-key witness length in bytes, shared by the hardened-child,
-/// normal-child, public-key and Ethereum-address statements.
+/// The secp256k1 private-key witness length in bytes.
 pub const PRIV_KEY_BYTES: usize = 32;
 
 fn placeholder_priv() -> Vec<u8> {
     alloc::vec![0u8; PRIV_KEY_BYTES]
 }
 
-/// Master-key verifier circuit for a witness of `seed_len` bytes.
-///
-/// The seed *length* is a public parameter of this statement: the circuit allocates one
-/// input word per byte, so a proof over a 64-byte BIP-39 seed and one over the 16-byte
-/// BIP-32 test vector are structurally different circuits. A verifier that assumes the
-/// test-vector length rejects every real proof, which is what it used to do.
+/// Master-key verifier circuit for a witness of the given byte length.
 pub fn master_key_verify_circuit(seed_len: usize) -> MasterKeyCircuit {
     MasterKeyCircuit { seed: alloc::vec![0u8; seed_len] }
 }
 
-/// SLIP-10 master-key verifier circuit for a witness of `seed_len` bytes.
+/// SLIP-10 master-key verifier circuit for a witness of the given byte length.
 pub fn slip10_master_verify_circuit(seed_len: usize) -> Slip10MasterCircuit {
     Slip10MasterCircuit { seed: alloc::vec![0u8; seed_len] }
 }
 
-/// BIP-39 seed verifier circuit for a mnemonic of `mnemonic_len` bytes and a salt of
-/// `salt_len` bytes.
-///
-/// Both lengths are public — the circuit allocates one input per witness byte — while
-/// neither the mnemonic nor the salt is. The verifier therefore never learns the
-/// passphrase, only how long it is (`salt_len - 8`).
+/// BIP-39 seed verifier circuit for a mnemonic and a salt of the given byte lengths.
 pub fn bip39_seed_verify_circuit(
     mnemonic_len: usize,
     salt_len: usize,
@@ -583,13 +490,7 @@ pub fn bip39_seed_verify_circuit(
     }
 }
 
-/// The BIP-39 PBKDF2 salt for `passphrase`: the constant `"mnemonic"` followed by the
-/// passphrase, empty for the default case.
-///
-/// Note that the canonical test vector's salt is *not* the default one — it carries the
-/// passphrase `"TREZOR"`, so `bip39_salt_for(b"")` and the salt baked into
-/// [bip39_seed_circuit] differ, and a verifier that reached for the wrong one would
-/// rebuild the wrong circuit.
+/// The BIP-39 PBKDF2 salt for a passphrase: the constant `"mnemonic"` followed by it.
 pub fn bip39_salt_for(passphrase: &[u8]) -> Vec<u8> {
     let mut salt = alloc::vec![b'm', b'n', b'e', b'm', b'o', b'n', b'i', b'c'];
     salt[..8].copy_from_slice(b"mnemonic");
@@ -597,8 +498,7 @@ pub fn bip39_salt_for(passphrase: &[u8]) -> Vec<u8> {
     salt
 }
 
-/// Hardened-child verifier circuit: the verifier-asserted chain code and index,
-/// with a placeholder parent private key.
+/// Hardened-child verifier circuit for an asserted chain code and index.
 pub fn hardened_child_verify_circuit(chain_code: Vec<u8>, index: u32) -> HardenedChildCircuit {
     HardenedChildCircuit { chain_code, parent_priv: placeholder_priv(), index }
 }
@@ -608,43 +508,27 @@ pub fn normal_child_verify_circuit(chain_code: Vec<u8>, index: u32) -> NormalChi
     NormalChildCircuit::shaped(chain_code, placeholder_priv(), index)
 }
 
-/// SLIP-10 ed25519 child verifier circuit: the verifier-asserted chain code and
-/// (hardened) index, with a placeholder parent key.
+/// SLIP-10 ed25519 child verifier circuit for an asserted chain code and index.
 pub fn slip10_child_verify_circuit(chain_code: Vec<u8>, index: u32) -> Slip10ChildCircuit {
     Slip10ChildCircuit { chain_code, parent_priv: placeholder_priv(), index }
 }
 
-/// Public-key verifier circuit (no public params; the asserted statement is the
-/// output public key).
+/// Public-key verifier circuit.
 pub fn public_key_verify_circuit() -> PubKeyCircuit {
     PubKeyCircuit::shaped(placeholder_priv())
 }
 
-/// Ethereum-address verifier circuit (the asserted statement is the output
-/// address).
+/// Ethereum-address verifier circuit.
 pub fn ethereum_address_verify_circuit() -> AddressCircuit {
     AddressCircuit::shaped(placeholder_priv())
 }
 
-/// The structural fingerprint of the circuit a prover would run for
-/// `(family, statement)`, or `None` for a pair no prover implements.
+/// The structural fingerprint of the circuit a prover would run for a family and
+/// statement, or `None` for a pair no prover implements.
 ///
-/// This is the same digest the ranged prover binds its entropy to, computed here from
-/// the *public* parameters alone. It is well defined without the witness because the
-/// fingerprinting backend ingests an input's **type** and not its value, while an
-/// allocated constant contributes its value — so the chain code, index and round count
-/// move the digest and the secret never does. That is what makes it safe to ask a
-/// device for: the answer carries no information about the seed.
-///
-/// The point of asking is to check that the circuit a device actually compiled is the
-/// circuit the host thinks it is. Byte-equality of a ranged proof already implies that
-/// for whatever statement was proved, but only for that statement, and only at the cost
-/// of proving it.
-///
-/// ⚠️ Cost is linear in the gate count, and the pass yields to nobody: it hands control
-/// back only when it finishes. That is a hard constraint on a device with a watchdog,
-/// not merely a slow operation — a caller there must use [statement_fingerprint_hooked]
-/// and service the watchdog from the hook.
+/// ⚠️ The pass services no io and its cost is linear in the gate count, so a caller on
+/// a device with a watchdog must use [statement_fingerprint_hooked]. See
+/// `knowledge/circuit-fingerprints.md`.
 pub fn statement_fingerprint<T: CombTableSource>(
     family: request::Family,
     statement: u8,
@@ -657,16 +541,7 @@ pub fn statement_fingerprint<T: CombTableSource>(
     );
 }
 
-/// [statement_fingerprint] with a [zkboo::backend::BackendHook] wrapping the pass, so a
-/// caller on constrained hardware can keep answering its OS while the pass runs.
-///
-/// The hook only observes backend operations, so the digest is identical to the unhooked
-/// one — `tests/hooked_fingerprint.rs` pins that, and pins that the hook fires at all.
-///
-/// The scale this matters at: BIP-39 is one HMAC chain per PBKDF2 round, so `rounds`
-/// multiplies the pass without bound while its memory stays flat — at 2048 rounds it is
-/// 553x the pass at 2 rounds and 221x a single-HMAC circuit, on a *smaller* heap than
-/// that circuit needs. Unhooked, that is a device reboot rather than a slow answer.
+/// [statement_fingerprint] with a [zkboo::backend::BackendHook] wrapping the pass.
 pub fn statement_fingerprint_hooked<T: CombTableSource, BH: zkboo::backend::BackendHook>(
     family: request::Family,
     statement: u8,
@@ -682,9 +557,8 @@ pub fn statement_fingerprint_hooked<T: CombTableSource, BH: zkboo::backend::Back
     ) -> Option<[u8; 32]> {
         Some(ranged::circuit_fingerprint_hooked::<C, BH>(c, arg))
     }
-    // The child statements are request-anchored: their public parameters come from
-    // the request, and the canonical test-vector parameters stand in when it omits
-    // them, exactly as the prover dispatch does.
+    // The canonical test-vector parameters stand in when the request omits them,
+    // exactly as the prover dispatch does.
     let cc = |d: &str| chain_code.map(<[u8]>::to_vec).unwrap_or_else(|| from_hex(d));
     match (family, statement) {
         (B32, MASTER_KEY) => fp::<BH, _>(hook_init_arg, &master_key_circuit()),

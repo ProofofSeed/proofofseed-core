@@ -3,29 +3,8 @@
 //! Relative call-stack depth of the prover, per statement, measured through the same
 //! per-operation hook the device uses to feed its watchdog.
 //!
-//! The device's own probe paints its stack and reads the high-water *after* a command
-//! returns. That reading cannot exist for a command that never returns, so the one path
-//! that matters most — a prover run that kills the device — is exactly the one the device
-//! cannot report on. This measures the same quantity host-side, where a crash is a
-//! backtrace rather than a factory reset.
-//!
-//! What it does: a [BackendHook] samples the stack pointer around every backend
-//! operation, through both phases the app runs (the challenge pass, then the streamed
-//! proof), and reports the deepest excursion below the frame that started the run.
-//!
-//! ⚠️ **Do not infer the device's ordering from this.** That is what these numbers were
-//! originally claimed to be good for, and the device falsified it on 2026-08-23: this
-//! table ranks BIP-39 as the *shallowest* of the three statements (-5.5% against the
-//! hardened child), while the device measured it as much the *deepest* — 19,320 B against
-//! a master key's 17,192 B. The ranking inverts. Host codegen, calling convention and
-//! inlining all differ from Thumb-2 on the secure element, and they differ *per circuit*,
-//! not by a common factor.
-//!
-//! What this is still good for is the questions that live inside one row: whether a
-//! statement's depth grows with a parameter (it does not grow with the BIP-39 round
-//! count, here or on the device), and whether a change to the circuits moved the depth at
-//! all. For any cross-statement comparison, and for any absolute figure, ask the device
-//! through its telemetry instruction instead.
+//! ⚠️ The device's ordering must not be inferred from this table; the device falsified
+//! it on 2026-08-23. See `knowledge/measurement-instruments.md`.
 //!
 //! Run: `cargo run --release -p proofofseed-host --example stack_profile`
 

@@ -1,11 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-//! Profiles the statements beyond the app's six — the per-chain address bindings
-//! (Bitcoin P2PKH/P2WPKH, P2SH-P2WPKH, Taproot; Solana ed25519 public key) and the
-//! BIP-39 seed derivation across round counts — for proof-size and device-budget
-//! tracking. Everything here is computed off-device with `zkboo-profiling`
-//! (`response_size` matches the streamed byte count exactly; cross-checked against
-//! the `proof_size` example on the six app statements).
+//! Profiles the statements beyond the app's six: the per-chain address bindings, and
+//! the BIP-39 seed derivation across round counts.
 //!
 //! Run: `cargo run --release -p proofofseed-host --example profile_extra`
 

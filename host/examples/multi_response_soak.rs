@@ -1,27 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-//! Does a multi-response proof succeed every time, or only sometimes?
-//!
-//! On the Flex a two-response master-key proof succeeds about a third of the time and
-//! otherwise dies with the SDK's panic status word, at the same point in the run each
-//! time. Polling was ruled out as the cause (it fails identically unpolled), and so were
-//! heap and stack — free space never fell below 3.6 KB, the heap peak never moved, and
-//! stack headroom stayed above 4 KB. What is left is the prover path.
-//!
-//! The observed rates fit one model closely: the first response always succeeds and each
-//! later one succeeds about one time in three.
-//!
-//!     x1  6/6      x2  2/6 (33%)      x4  0/2
-//!
-//! One in three is the number of ZKBoo challenge values, which is what makes this worth
-//! running rather than reasoning about: if some challenge values break responses after the
-//! first, it is a prover fault, and whether it lives in shared code or only on the device
-//! decides who is affected. The proofs the standalone CLI and the Python package produce
-//! come from this same path.
-//!
-//! Each trial draws fresh entropy, so the challenge differs between trials exactly as it
-//! does on the device. A trial that panics is caught rather than aborting the run, since
-//! the panic is the observation.
+//! Repeated multi-response proofs on fresh entropy, catching a panic rather than
+//! aborting, because the panic is the observation.
 //!
 //! Run: `cargo run --release -p proofofseed-host --example multi_response_soak`
 

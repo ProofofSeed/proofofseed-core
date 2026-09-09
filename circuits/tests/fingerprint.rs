@@ -1,13 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-//! The statement fingerprint, and the two properties anything asking a device for one
-//! depends on.
-//!
-//! A device can be asked for this digest and its answer compared with the host's, which
-//! is only meaningful if the digest is a function of the *public* parameters and not of
-//! the seed. Both halves are checked here: changing a public parameter must move it (or
-//! the comparison proves nothing), and changing the witness must not (or asking a device
-//! for it would leak).
+//! The statement fingerprint moves with a public parameter and not with the witness.
 
 use proofofseed_circuits::comb::{ComputedComb, FlashComb};
 use proofofseed_circuits::request::Family::{Bip32Secp256k1 as B32, Slip10Ed25519 as S10};

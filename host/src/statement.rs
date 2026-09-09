@@ -1,12 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-//! Statement plumbing shared by every host frontend (the `proofofseed` CLI, the
-//! Python package): mapping a statement + family + derivation parameters + seed
-//! onto the shared circuits, request, witness material, and deterministic
-//! entropy — the single place that resolves a request into a provable circuit,
-//! so all frontends produce identical proof bytes and none re-implements the
-//! rules. Mirrors exactly what the device app does for the same request, so a
-//! device and a host prover holding the same seed co-produce one ranged proof.
+//! The single place that resolves a request into a provable circuit, shared by every
+//! host frontend and mirroring what the device app does for the same request.
 
 use crate::{derive, harness};
 use proofofseed_circuits::ranged::{
@@ -25,21 +20,20 @@ use zkboo_profiling::{ProfilingData, profile};
 
 const HARDENED: u32 = 0x8000_0000;
 
-/// A proof-of-seed statement, family-agnostic. The wire id ([Statement::id]) is
-/// what the request and the entropy transcript carry.
+/// A proof-of-seed statement, family-agnostic.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Statement {
-    /// Seed → BIP-32 master key + chain code (output is secret material).
+    /// Seed to BIP-32 master key and chain code.
     MasterKey,
-    /// Parent key → hardened child key + chain code (output is secret material).
+    /// Parent key to hardened child key and chain code.
     HardenedChild,
-    /// Mnemonic → BIP-39 seed via PBKDF2 (output is secret material).
+    /// Mnemonic to BIP-39 seed via PBKDF2.
     Bip39Seed,
-    /// Private key → secp256k1 public key (public output).
+    /// Private key to secp256k1 public key.
     PublicKey,
-    /// Parent key → normal (non-hardened) child (output is secret material).
+    /// Parent key to normal (non-hardened) child.
     NormalChild,
-    /// Private key → Ethereum address (public output).
+    /// Private key to Ethereum address.
     EthereumAddress,
 }
 
@@ -79,8 +73,7 @@ impl Statement {
         Statement::ALL.into_iter().find(|s| s.name() == name)
     }
 
-    /// Whether the statement's public output is itself secret key material (so a
-    /// sidecar should carry only a commitment to it, never the value).
+    /// Whether the statement's public output is itself secret key material.
     pub fn output_is_secret(self) -> bool {
         !matches!(self, Statement::PublicKey | Statement::EthereumAddress)
     }
@@ -102,7 +95,7 @@ pub fn family_from_name(name: &str) -> Option<Family> {
     }
 }
 
-/// SLIP-10/ed25519 carries only the recovery statements.
+/// Whether a family carries a statement.
 pub fn check_family(statement: Statement, family: Family) -> Result<(), String> {
     if family == Family::Slip10Ed25519
         && !matches!(statement, Statement::MasterKey | Statement::HardenedChild)
@@ -144,7 +137,7 @@ macro_rules! with_circuit {
 }
 
 impl AnyCircuit {
-    /// The serialized public output (plain circuit execution).
+    /// The serialised public output.
     pub fn output(&self) -> Vec<u8> {
         with_circuit!(self, c => harness::output_of(c))
     }
@@ -157,7 +150,7 @@ impl AnyCircuit {
         with_circuit!(self, c => deterministic_seed_entropy(c, digest))
     }
 
-    /// Streams responses `[start, end)` of the `n`-response proof to `writer`.
+    /// Streams a half-open range of an `n`-response proof to a writer.
     pub fn prove_to<W: std::io::Write>(
         &self,
         n: usize,
@@ -174,9 +167,7 @@ impl AnyCircuit {
     }
 }
 
-/// The dummy-witness circuit for a statement (its canonical test-vector
-/// constructor): sizes and memory are data-oblivious, so profiling and dry-run
-/// planning never need a witness.
+/// The canonical test-vector circuit for a statement, for profiling and planning.
 pub fn dummy_circuit(
     statement: Statement,
     family: Family,
@@ -197,26 +188,17 @@ pub fn dummy_circuit(
     })
 }
 
-/// Everything a prove/derive run needs, resolved from the seed: the circuit with
-/// its witness, the device-compatible request, and (for a ranged request) the
-/// deterministic prover entropy digest.
+/// Everything a prove or derive run needs, resolved from the seed.
 pub struct Resolved {
     pub circuit: AnyCircuit,
     pub request: ProofRequest,
     pub digest: Option<Zeroizing<[u8; 32]>>,
-    /// The witness *shape* of the seed statements: the witness byte length, and the
-    /// BIP-39 salt's byte length where there is one. `None` for statements whose circuit
-    /// shape is fixed by their public parameters instead.
-    ///
-    /// A verifier needs this to rebuild the circuit, because these statements allocate
-    /// one input per witness byte. It is two lengths and nothing else — the salt's bytes
-    /// are witness, so a BIP-39 passphrase never leaves the prover; only how long it is
-    /// (`salt_len - 8`) can be inferred.
+    /// The witness shape of the seed statements: the witness byte length, and the
+    /// BIP-39 salt's byte length where there is one.
     pub witness_shape: Option<(usize, Option<usize>)>,
 }
 
-/// Inputs to [resolve]. The mnemonic and passphrase are borrowed and never
-/// copied beyond the derivation.
+/// Inputs to [resolve].
 pub struct ResolveParams<'a> {
     pub statement: Statement,
     pub family: Family,
@@ -230,9 +212,7 @@ pub struct ResolveParams<'a> {
     pub passphrase: &'a [u8],
 }
 
-/// Derives the witness from the mnemonic and builds the circuit + request,
-/// mirroring the device's resolution rules (chain-code anchoring included: the
-/// request carries the derived parent chain code, so the verifier checks it).
+/// Derives the witness from the mnemonic and builds the circuit and request.
 pub fn resolve(p: ResolveParams<'_>) -> Result<Resolved, String> {
     check_family(p.statement, p.family)?;
     let mut salt = Zeroizing::new(b"mnemonic".to_vec());
@@ -243,10 +223,9 @@ pub fn resolve(p: ResolveParams<'_>) -> Result<Resolved, String> {
     if !needs_path && (p.path.is_some() || p.index.is_some()) {
         return Err(format!("{} takes no path/index", statement.name()));
     }
-    // The key statements (public-key, ethereum-address) take the full key path but
-    // no child index — a stray index would silently perturb the deterministic
-    // entropy (it is absorbed) while being ignored by the circuit and the verifier,
-    // so two co-provers disagreeing on it would fail to assemble. Reject it.
+    // The key statements take the full key path but no child index: a stray index is
+    // absorbed into the deterministic entropy while being ignored by the circuit and
+    // the verifier, so two co-provers disagreeing on it would fail to assemble.
     if matches!(statement, Statement::PublicKey | Statement::EthereumAddress) && p.index.is_some() {
         return Err(format!("{} takes a path (the full key path) but no index", statement.name()));
     }
@@ -353,8 +332,7 @@ pub fn resolve(p: ResolveParams<'_>) -> Result<Resolved, String> {
         ranged_request_digest(statement.id(), &request, &resolved_path, material)
     });
     // The seed statements allocate one circuit input per witness byte, so their shape
-    // has to travel to the verifier with the proof. The other statements take theirs
-    // from public parameters the verifier already asserts.
+    // travels to the verifier with the proof; see knowledge/verifier-circuits.md.
     let witness_shape = match &material_owner {
         MaterialOwner::Seed { seed } => Some((seed.len(), None)),
         MaterialOwner::Mnemonic { mnemonic, salt } => Some((mnemonic.len(), Some(salt.len()))),
@@ -363,7 +341,7 @@ pub fn resolve(p: ResolveParams<'_>) -> Result<Resolved, String> {
     Ok(Resolved { circuit, request, digest, witness_shape })
 }
 
-/// Owned witness material (the shared [WitnessMaterial] borrows), zeroized on drop.
+/// Owned witness material, zeroized on drop.
 enum MaterialOwner {
     Seed { seed: Zeroizing<Vec<u8>> },
     Mnemonic { mnemonic: Zeroizing<Vec<u8>>, salt: Zeroizing<Vec<u8>> },
@@ -388,8 +366,7 @@ impl MaterialOwner {
     }
 }
 
-/// Fresh 32-byte prover entropy from the OS (the rangeless mode; the software
-/// analog of the device TRNG draw).
+/// Fresh 32-byte prover entropy from the operating system.
 pub fn fresh_entropy() -> Result<Zeroizing<[u8; 32]>, String> {
     let mut entropy = Zeroizing::new([0u8; 32]);
     getrandom::getrandom(&mut *entropy).map_err(|e| format!("OS randomness failed: {e}"))?;

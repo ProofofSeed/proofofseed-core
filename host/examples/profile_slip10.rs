@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-//! Profiles the SLIP-10/ed25519 (family 1) statements for on-device budgeting, next
-//! to their BIP-32 counterparts: gate counts, refcounts, per-response proof size, and
-//! the estimated prover working set at the device's refcount width (`RC = u8`).
+//! Profiles the SLIP-10/ed25519 statements beside their BIP-32 counterparts: gate
+//! counts, refcounts, per-response proof size, and the estimated prover working set.
 //!
 //! Run: `cargo run --release -p proofofseed-host --example profile_slip10`
 

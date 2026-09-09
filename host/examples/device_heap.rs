@@ -1,18 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
 //! Peak prover heap per statement, in the device's exact configuration, for both comb
-//! table sources.
-//!
-//! The device reads its secp256k1 comb tables from a precomputed table instead of
-//! recomputing them with native point arithmetic. That is a different heap profile from
-//! the one every previous measurement recorded, because those measured the recomputing
-//! variant — the flash variant lived only inside the app, where no host allocator could
-//! see it. It is now the same circuit with a different table source, so it can be
-//! measured here, which is what this does.
-//!
-//! It also measures the seed statements at a realistic witness length. Their witness
-//! length is a public circuit parameter, so the compiled-in 16-byte test vector is not
-//! the circuit a software wallet runs on a 64-byte BIP-39 seed.
+//! table sources and at realistic witness lengths.
 //!
 //! Run: `cargo run --release -p proofofseed-host --example device_heap`
 
@@ -36,17 +25,12 @@ use zkboo::word::{CompositeWord, Word};
 
 static CURRENT: AtomicUsize = AtomicUsize::new(0);
 static PEAK: AtomicUsize = AtomicUsize::new(0);
-/// Live allocation count, and the count at the moment the peak was set. Together with
-/// the peak these bound how much of the figure can depend on pointer width: a peak made
-/// of a few large word buffers is nearly pointer-independent, while one made of thousands
-/// of small nodes is not.
+/// Live allocation count, and the count at the moment the peak was set.
 static LIVE: AtomicUsize = AtomicUsize::new(0);
 static LIVE_AT_PEAK: AtomicUsize = AtomicUsize::new(0);
 
-/// A slot table of the currently-live allocations, so the *sizes* making up the peak can
-/// be read off. There are only a few dozen of them, and knowing which buffers they are is
-/// what decides whether the figure depends on pointer width: a buffer of circuit words is
-/// the same size on a 32-bit device, while a buffer of `usize` indices halves.
+/// A slot table of the currently-live allocations, so the sizes making up the peak can
+/// be read off.
 const SLOTS: usize = 512;
 static SLOT_PTR: [AtomicUsize; SLOTS] = [const { AtomicUsize::new(0) }; SLOTS];
 static SLOT_SIZE: [AtomicUsize; SLOTS] = [const { AtomicUsize::new(0) }; SLOTS];

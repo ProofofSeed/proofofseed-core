@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-//! Measures peak heap of the streaming master_key prover at increasing iteration
-//! counts, using the EXACT on-device config (RC = u8, Keccak-256, a discarding
-//! streaming sink). Tells us whether device-heap peak is constant per iteration
-//! (good — a fixed budget suffices) or grows (a retention bug to fix).
+//! Peak heap of the streaming master-key prover at increasing response counts, in the
+//! device's configuration.
 //!
-//! Run: `cargo run --release -p zkboo-bip32 --example measure_prove_heap`
+//! Run: `cargo run --release -p proofofseed-host --example measure_prove_heap`
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};

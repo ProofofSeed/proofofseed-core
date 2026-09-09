@@ -3,35 +3,10 @@
 //! Charges a prove against a heap of the device's exact size, using the device's exact
 //! allocator, and reports whether it is served.
 //!
-//! Every previous heap measurement here counted *bytes requested*, with a tracking
-//! allocator wrapped around the system heap. That number is blind to three things the
-//! secure element cannot avoid: the per-allocation header `linked_list_allocator` keeps,
-//! the padding it adds to satisfy alignment, and first-fit fragmentation — a request can
-//! fail for want of a contiguous hole while the total free space is ample. The device
-//! runs `embedded_alloc::Heap`, which is that allocator over a fixed static array, so the
-//! way to see those three is to run the same allocator over an array of the same size.
-//!
-//! Read the verdict in one direction only. The host is 64-bit and the device 32-bit, so
-//! a hole header costs 16 B here and 8 B there, and minimum alignment is 8 B here and
-//! 4 B there, making this arena more wasteful than the device's: **fitting here proves
-//! fitting there; failing here does not by itself prove failing there.**
-//!
-//! This paragraph used to add that the allocation *sizes* are pointer-width independent,
-//! on the grounds that the prover holds no `Vec<usize>`. The device's own measurement
-//! falsifies that: the same proof peaks at 11,747 B there against 16,932 B here, with the
-//! allocation counts agreeing, so the sizes are not width-independent and the one-way
-//! reading above is the only thing this tool ever established.
+//! 🔴 Withdrawn as a source of device figures (2026-08-24), and readable in one
+//! direction only even before that; see `knowledge/measurement-instruments.md`.
 //!
 //! Run: `cargo run --release -p proofofseed-host --example device_arena`
-//!
-//! 🔴 **Withdrawn as a source of device figures (2026-08-24).** This bisection put
-//! the minimum served arena for a master-key proof at 19,200 B. The device runs that
-//! proof inside a 13,312 B arena, peaking at 11,747 B with 1,548 B still free — so the
-//! bisection demanded more than the device's whole arena for a proof it serves
-//! comfortably. The cause is the 64-bit host, not this tool's configuration; see
-//! `device_heap.rs` for the evidence. Nothing here may be used to rule a statement in
-//! or out on the device: the device measures its own heap now, via the telemetry
-//! instruction driven by `ledger-app/host/bench_matrix.py`.
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::UnsafeCell;
