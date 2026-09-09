@@ -410,7 +410,7 @@ dependencies = [
 
 [[package]]
 name = "zkboo"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "postcard",
  "serde",
@@ -419,7 +419,7 @@ dependencies = [
 
 [[package]]
 name = "zkboo-bip32"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "zkboo",
  "zkboo-ecc",
@@ -439,7 +439,7 @@ dependencies = [
 
 [[package]]
 name = "zkboo-ecc"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "zeroize",
  "zkboo",
@@ -462,7 +462,7 @@ dependencies = [
 
 [[package]]
 name = "zkboo-modular"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "zeroize",
  "zkboo",
