@@ -86,4 +86,4 @@ Had change 2 touched a proof byte the `raw/public_key` pair would have said so, 
 - The four `raw/` rows unchanged.
 
 Independently, all eight circuit fingerprints were unchanged across both releases, as the upstream release said they would be.
-The current set is tabulated in `../../ledger-app/docs/benchmarks.md`.
+The current set is tabulated in `../../ledger-app/knowledge/benchmarks.md`.

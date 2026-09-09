@@ -55,7 +55,7 @@ Predicted: the heap loses the 1,664 B advice object and the stack gains a known 
 Confirmed on hardware 2026-09-07 and 2026-09-09, better than predicted.
 Every curve heap peak came back 8 B below its pre-advice value, so the advice object arrived and left without the device seeing it, and the least servable hole is 3,400–6,848 B against a 2,048 B largest request.
 The 224 B never appeared in the stack high-water at all, because a marginal frame adds to the high-water only if it sits on the deepest call path and this one does not.
-The full record is `../../ledger-app/docs/benchmarks.md`.
+The full record is `../../ledger-app/knowledge/benchmarks.md`.
 
 The mirror also runs once per circuit execution rather than once per proof — 876 evaluations against one at 438 responses — which zkboo measures at +0.33% to +0.50% of prover wall clock.
 That is a host figure at window width 5 over precomputed tables, on arithmetic whose long dependent 256-bit multiply-reduce chain is the shape most likely to scale differently on a 32-bit core, so the per-response device law must not be restated from it.

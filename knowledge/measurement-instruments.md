@@ -54,7 +54,7 @@ The earlier figure of ~1.9 KB/s is retracted outright: its timer spanned the con
 
 `profile_extra` profiles the statements beyond the app's six — the per-chain address bindings and the BIP-39 seed derivation across round counts — with `zkboo-profiling`, whose `response_size` matches the streamed byte count exactly.
 `profile_seed_statements` and `profile_slip10` report gate counts, refcount widths, per-response size and the estimated prover working set at the device's refcount width.
-`statement_fingerprints` prints the circuit fingerprint of every implemented statement, for the table in `ledger-app/docs/benchmarks.md`.
+`statement_fingerprints` prints the circuit fingerprint of every implemented statement, for the table in `ledger-app/knowledge/benchmarks.md`.
 
 ## Watchdog silence
 
