@@ -70,7 +70,7 @@ fn the_hooked_fingerprint_equals_the_unhooked_one() {
     let circuit = hardened_child_circuit();
     let ops = Cell::new(0);
     let hooked = circuit_fingerprint_hooked::<_, Counting>(&circuit, &ops);
-    let plain: [u8; 32] = hash_circuit::<_, zkboo::crypto::Keccak256Hasher>(&circuit);
+    let plain: [u8; 32] = hash_circuit::<_, proofofseed_circuits::hasher::Keccak256Hasher>(&circuit);
     assert_eq!(hooked, plain, "the hook must not perturb the digest");
 }
 

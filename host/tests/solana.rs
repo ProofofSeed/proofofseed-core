@@ -19,7 +19,13 @@ use proofofseed_circuits::{
 use proofofseed_host::harness::{exec_words, gen_stream, output_of};
 use proofofseed_host::{expected_output, verify};
 use zkboo::backend::{Backend, Frontend};
-use zkboo::circuit::Circuit;
+use zkboo::circuit::{Assertions, Circuit};
+use zkboo::executor::ExecOptions;
+use zkboo_bip32::ed25519_public_key_affine;
+use zkboo_ecc::edwards::{ComputedWindowTables, Point};
+
+/// The comb window width the ed25519 derivations are built at.
+const ED25519_WINDOW_BITS: usize = 5;
 
 const H: u32 = 0x8000_0000;
 const BIP32_FAMILY: u8 = 0;
@@ -119,15 +125,25 @@ fn canonical_circuits_match_their_expected_constants() {
 }
 
 /// RFC 8032 public key of a derived key, for the wallet-core anchor below.
+///
+/// The compression step takes the affine point as advice and *asserts* that it scales back
+/// to the projective coordinates the circuit computed, rather than inverting in-circuit to
+/// find it. So this statement asserts for real — [payload] checks the word it emits — and
+/// the advice has to be computed on the host, from the same key.
 struct PubkeyOf {
     key: Vec<u8>,
 }
 impl Circuit for PubkeyOf {
     fn exec<B: Backend>(&self, frontend: &Frontend<B>) {
-        let key: [_; 32] = core::array::from_fn(|i| frontend.input(self.key[i]));
-        zkboo_bip32::ed25519_public_key(frontend, &key)
-            .into_iter()
-            .for_each(|w| frontend.output(w));
+        Assertions::scope(frontend, |assertions| {
+            let key: [_; 32] = core::array::from_fn(|i| frontend.input(self.key[i]));
+            let bytes: [u8; 32] = self.key.as_slice().try_into().expect("32 key bytes");
+            let mut tables = ComputedWindowTables::new(Point::base(), ED25519_WINDOW_BITS);
+            let advice = ed25519_public_key_affine(bytes, &mut tables, ExecOptions::new());
+            zkboo_bip32::ed25519_public_key(frontend, &key, Some(advice), assertions)
+                .into_iter()
+                .for_each(|w| frontend.output(w));
+        });
     }
 }
 

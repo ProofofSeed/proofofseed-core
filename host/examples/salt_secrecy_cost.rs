@@ -15,6 +15,7 @@
 //! identical between the two and would swamp the difference if measured whole.
 
 use zkboo::backend::{Backend, Frontend};
+use proofofseed_circuits::assert_nothing;
 use zkboo::circuit::Circuit;
 use zkboo_hmac::hmac;
 use zkboo_profiling::profile;
@@ -43,6 +44,7 @@ impl Circuit for FirstHmac {
         }
         let out = hmac(frontend.allocator(), key, msg, sha512bytes, SHA512_BLOCKSIZE);
         out.into_iter().for_each(|w| frontend.output(w));
+        assert_nothing(frontend);
     }
 }
 

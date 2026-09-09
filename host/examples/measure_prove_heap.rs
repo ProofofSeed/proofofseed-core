@@ -10,12 +10,15 @@
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use proofofseed_circuits::assert_nothing;
+use proofofseed_circuits::hasher::Keccak256Hasher;
 use zkboo::backend::{Backend, Frontend};
 use zkboo::circuit::Circuit;
-use zkboo::crypto::{HashPRG, Keccak256Hasher};
+use zkboo::crypto::HashPRG;
 use zkboo::prover::challenge::Party;
 use zkboo::prover::proof::collectors::ResponseDataCollector;
-use zkboo::prover::prove_custom;
+use zkboo::prover::proof::ProofOptions;
+use zkboo::prover::prove;
 use zkboo::prover::views::OwnedFlexibleWordTriplePool;
 use zkboo::word::{CompositeWord, Word};
 use zkboo_bip32::master_key;
@@ -63,6 +66,7 @@ impl Circuit for MasterKeyCircuit {
         let (il, ir) = master_key(frontend.allocator(), seed);
         il.into_iter().for_each(|w| frontend.output(w));
         ir.into_iter().for_each(|w| frontend.output(w));
+        assert_nothing(frontend);
     }
 }
 
@@ -88,12 +92,12 @@ fn main() {
     println!("peak heap of streaming master_key prover (RC=u8, Keccak), by num_iters:");
     for n in [1usize, 2, 3, 4, 8, 16] {
         PEAK.store(CURRENT.load(Ordering::Relaxed), Ordering::Relaxed);
-        let _: Vec<()> = prove_custom::<MasterKeyCircuit, H, PS, PV, S, DiscardSink, WTP>(
+        let _: Vec<()> = prove::<MasterKeyCircuit, H, PS, PV, S, DiscardSink, WTP, _>(
             &circuit,
             n,
             b"proofofseed-ledger-app M0 seed entropy",
             &[],
-            (),
+            ProofOptions::new().with_collector_arg::<DiscardSink>(()),
         );
         let peak = PEAK.load(Ordering::Relaxed);
         let base = CURRENT.load(Ordering::Relaxed);

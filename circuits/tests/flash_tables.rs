@@ -25,10 +25,10 @@ use proofofseed_circuits::{
     AddressCircuit, NormalChildCircuit, PubKeyCircuit, ethereum_address_circuit,
     normal_child_circuit, public_key_circuit,
 };
+use proofofseed_circuits::hasher::Keccak256Hasher;
 use zkboo::circuit::Circuit;
-use zkboo::crypto::Keccak256Hasher;
 use zkboo_circuit_hash::hash_circuit;
-use zkboo_ecc::montgomery::{ComputedWindowTables, Curve, DEFAULT_COMB_WINDOW_BITS, WindowTables};
+use zkboo_ecc::weierstrass::{ComputedWindowTables, Curve, DEFAULT_COMB_WINDOW_BITS, WindowTables};
 use zkboo_ecc::secp256k1::Secp256k1PM;
 
 /// Scalar width in bits (256 = u64 × 4).
@@ -56,7 +56,7 @@ fn the_flash_table_reconstructs_to_the_computed_one() {
         for (j, coords) in want.iter().enumerate() {
             let got = entry(base + j);
             for c in 0..3 {
-                assert_eq!(*coords[c].inner(), *got[c].inner(), "window {k} entry {j} coord {c}");
+                assert_eq!(coords[c].inner(), got[c].inner(), "window {k} entry {j} coord {c}");
             }
             seen += 1;
         }

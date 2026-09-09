@@ -26,8 +26,11 @@ use proofofseed_circuits::{
     bip39_seed_verify_circuit, master_key_verify_circuit, slip10_child_circuit,
     slip10_child_verify_circuit, slip10_master_circuit, slip10_master_verify_circuit,
 };
+use proofofseed_circuits::hasher::Keccak256Hasher;
 use zkboo::circuit::Circuit;
-use zkboo::crypto::{GeneratesRandom, HashPRG, Hasher, Keccak256Hasher, PseudoRandomGenerator};
+use zkboo::crypto::{
+    GeneratesRandom, HashPRG, Hasher, PseudoRandomGenerator, TAG_CHALLENGE, absorb_framed,
+};
 use zkboo::prover::challenge::{ChallengeGenerator, Party, PartyVec};
 use zkboo::verifier::replay::{
     OwnedFlexibleWordPairPool, ReplaySource, ViewReplayError, ViewReplayerBackend,
@@ -40,6 +43,12 @@ type PV = HashPRG<H>;
 type S = [u8; 32];
 type RC = usize; // host verifier: no memory pressure, no overflow worry
 type WPP = OwnedFlexibleWordPairPool<RC>;
+type WP = zkboo::executor::OwnedFlexibleWordPool<RC>;
+
+/// Plain execution of a circuit, with the host's word pool and no backend hook.
+fn exec_circuit<C: Circuit>(circuit: &C) -> Words {
+    zkboo::executor::exec::<C, WP, _>(circuit, zkboo::executor::ExecOptions::new())
+}
 
 // ---------------------------------------------------------------------------
 // Byte-cursor replay source.
@@ -133,10 +142,9 @@ fn verify_stream_inner<C: Circuit>(
     };
 
     let mut challenge_hasher = H::new();
-    // Length-prefixed, domain-separated binding — must match the prover exactly.
-    challenge_hasher.update(b"ZKBOO-BINDING-v1");
-    challenge_hasher.update(&(binding.len() as u64).to_le_bytes());
-    challenge_hasher.update(binding);
+    // Tagged and length-prefixed binding — must match the prover exactly, so it uses
+    // the library's own tag and framing rather than a second copy of them.
+    absorb_framed(&mut challenge_hasher, TAG_CHALLENGE, binding);
 
     let mut challenges = PartyVec::new();
 
@@ -232,21 +240,19 @@ fn deserialize_words(b: &[u8]) -> Option<Words> {
 /// exec trips the OS watchdog. Returns `None` for an unknown statement, family, or a
 /// statement the family does not carry.
 pub fn expected_output(statement: u8, rounds: usize, family: u8) -> Option<Vec<u8>> {
-    use zkboo::executor::{OwnedFlexibleWordPool, exec};
-    type WP = OwnedFlexibleWordPool<RC>;
     let words = match Family::from_wire(family)? {
         Family::Bip32Secp256k1 => match statement {
-            MASTER_KEY => exec::<_, WP>(&master_key_circuit()),
-            HARDENED_CHILD => exec::<_, WP>(&hardened_child_circuit()),
-            BIP39_SEED => exec::<_, WP>(&bip39_seed_circuit(rounds)),
-            PUBLIC_KEY => exec::<_, WP>(&public_key_circuit()),
-            NORMAL_CHILD => exec::<_, WP>(&normal_child_circuit()),
-            ETH_ADDRESS => exec::<_, WP>(&ethereum_address_circuit()),
+            MASTER_KEY => exec_circuit(&master_key_circuit()),
+            HARDENED_CHILD => exec_circuit(&hardened_child_circuit()),
+            BIP39_SEED => exec_circuit(&bip39_seed_circuit(rounds)),
+            PUBLIC_KEY => exec_circuit(&public_key_circuit()),
+            NORMAL_CHILD => exec_circuit(&normal_child_circuit()),
+            ETH_ADDRESS => exec_circuit(&ethereum_address_circuit()),
             _ => return None,
         },
         Family::Slip10Ed25519 => match statement {
-            MASTER_KEY => exec::<_, WP>(&slip10_master_circuit()),
-            HARDENED_CHILD => exec::<_, WP>(&slip10_child_circuit()),
+            MASTER_KEY => exec_circuit(&slip10_master_circuit()),
+            HARDENED_CHILD => exec_circuit(&slip10_child_circuit()),
             _ => return None,
         },
     };
@@ -275,8 +281,6 @@ pub fn curve_statement_output(
     index: Option<u32>,
 ) -> Option<Vec<u8>> {
     use proofofseed_circuits::{AddressCircuit, NormalChildCircuit, PubKeyCircuit};
-    use zkboo::executor::{OwnedFlexibleWordPool, exec};
-    type WP = OwnedFlexibleWordPool<RC>;
     let key = private_key.to_vec();
     // Named with the default table source, exactly as the canonical constructors are:
     // the source moves neither the output nor the fingerprint (pinned by tests in
@@ -284,16 +288,16 @@ pub fn curve_statement_output(
     let words = match statement {
         PUBLIC_KEY => {
             let circuit: PubKeyCircuit = PubKeyCircuit::new(key);
-            exec::<_, WP>(&circuit)
+            exec_circuit(&circuit)
         }
         ETH_ADDRESS => {
             let circuit: AddressCircuit = AddressCircuit::new(key);
-            exec::<_, WP>(&circuit)
+            exec_circuit(&circuit)
         }
         NORMAL_CHILD => {
             let circuit: NormalChildCircuit =
                 NormalChildCircuit::new(chain_code?.to_vec(), key, index?);
-            exec::<_, WP>(&circuit)
+            exec_circuit(&circuit)
         }
         _ => return None,
     };
@@ -322,15 +326,13 @@ pub fn hardened_child_statement_output(
     index: u32,
 ) -> Option<Vec<u8>> {
     use proofofseed_circuits::{HardenedChildCircuit, Slip10ChildCircuit};
-    use zkboo::executor::{OwnedFlexibleWordPool, exec};
-    type WP = OwnedFlexibleWordPool<RC>;
     let words = match family {
-        0 => exec::<_, WP>(&HardenedChildCircuit {
+        0 => exec_circuit(&HardenedChildCircuit {
             chain_code: chain_code.to_vec(),
             parent_priv: parent_priv.to_vec(),
             index,
         }),
-        1 => exec::<_, WP>(&Slip10ChildCircuit {
+        1 => exec_circuit(&Slip10ChildCircuit {
             chain_code: chain_code.to_vec(),
             parent_priv: parent_priv.to_vec(),
             index,
@@ -563,14 +565,12 @@ pub fn n_eps(bits: u32) -> usize {
 pub mod harness {
     use super::*;
     use core::cell::RefCell;
-    use zkboo::executor::{OwnedFlexibleWordPool, exec};
     use zkboo::prover::challenge::ChallengeBuilder;
-    use zkboo::prover::proof::build_proof_custom;
     use zkboo::prover::proof::collectors::ResponseDataCollector;
+    use zkboo::prover::proof::{ProofOptions, build_proof};
     use zkboo::prover::views::OwnedFlexibleWordTriplePool;
 
     type PS = HashPRG<H>;
-    type WP = OwnedFlexibleWordPool<RC>;
     pub(crate) type WTP = OwnedFlexibleWordTriplePool<RC>;
 
     /// Prover-side sink that writes the canonical byte stream to a Vec (the same
@@ -634,12 +634,12 @@ pub mod harness {
             it.finalize();
         }
         let challenge_entropy = builder.finalize();
-        let _: Vec<()> = build_proof_custom::<C, H, PS, PV, S, VecSink, WTP>(
+        let _: Vec<()> = build_proof::<C, H, PS, PV, S, VecSink, WTP, _>(
             circuit,
             seed_entropy,
             challenge_entropy,
             n,
-            &out,
+            ProofOptions::new().with_collector_arg::<VecSink>(&out),
         );
         out.into_inner()
     }
@@ -682,12 +682,12 @@ pub mod harness {
     /// The device's serialized public output for `circuit` (plain execution, then
     /// `proofofseed_circuits::serialize_words`).
     pub fn output_of<C: Circuit>(circuit: &C) -> Vec<u8> {
-        proofofseed_circuits::serialize_words(&exec::<C, WP>(circuit))
+        proofofseed_circuits::serialize_words(&exec_circuit(circuit))
     }
 
     /// The plain-execution public output of `circuit`, as structured [Words].
     pub fn exec_words<C: Circuit>(circuit: &C) -> Words {
-        exec::<C, WP>(circuit)
+        super::exec_circuit(circuit)
     }
 
     /// Shared state behind [WriteSink]: the writer, the number of proof bytes
@@ -962,7 +962,7 @@ mod tests {
     use std::collections::BTreeSet;
     use core::cell::RefCell;
     use zkboo::prover::challenge::ChallengeBuilder;
-    use zkboo::prover::proof::build_proof_custom;
+    use zkboo::prover::proof::{ProofOptions, build_proof};
     use zkboo::prover::views::collectors::{ViewCommitmentsRelayer, ViewsDataCollector};
     use zkboo::prover::views::ViewCommitment;
 
@@ -1016,12 +1016,12 @@ mod tests {
             it.finalize();
         }
         let challenge_entropy = builder.finalize();
-        let _: Vec<()> = build_proof_custom::<C, H, PS, PV, S, VecSink, WTP>(
+        let _: Vec<()> = build_proof::<C, H, PS, PV, S, VecSink, WTP, _>(
             circuit,
             seed_entropy,
             challenge_entropy,
             n,
-            &out,
+            ProofOptions::new().with_collector_arg::<VecSink>(&out),
         );
         out.into_inner()
     }

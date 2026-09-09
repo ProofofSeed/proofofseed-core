@@ -14,7 +14,7 @@
 use std::fs::File;
 use std::io::{BufWriter, Write};
 
-use zkboo_ecc::montgomery::{ComputedWindowTables, Curve, WindowTables, DEFAULT_COMB_WINDOW_BITS};
+use zkboo_ecc::weierstrass::{ComputedWindowTables, Curve, WindowTables, DEFAULT_COMB_WINDOW_BITS};
 use zkboo_ecc::secp256k1::Secp256k1PM;
 
 fn main() {
@@ -51,7 +51,11 @@ fn main() {
                 .iter()
                 .map(|entry| {
                     core::array::from_fn(|c| {
-                        let bytes = (*entry[c].inner()).to_le_bytes();
+                        // The stored representation, not the canonical residue: these limbs
+                        // are read straight back with `Montgomery::from_raw` on the device, so
+                        // the two sides must name the same form. On this pseudo-Mersenne field
+                        // they are the same word, which is exactly why the type has to say it.
+                        let bytes = entry[c].inner().into_raw().to_le_bytes();
                         core::array::from_fn(|i| u64::from_le_bytes(bytes[i]))
                     })
                 })
