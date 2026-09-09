@@ -41,7 +41,14 @@ in length *and* digest — both `public_key` rows among them. Only the five `der
 which is exactly what an entropy-transcript change should do and nothing else. Sizes, rates and the
 device cost laws carry over untouched.
 
-⚠️ What it trades: the heap loses the 1,664 B advice object and the **stack gains a known 224 B**
+✅ **Confirmed on hardware 2026-09-07/09**, and the trade came out better than predicted: every
+curve heap peak is **8 B below** its pre-advice value, so the advice object arrived and left without
+the device seeing it, and the least servable hole is 3,400–6,848 B against a 2,048 B largest
+request. 🪤 **The 224 B never appeared in the stack high-water at all** — a marginal frame only adds
+to the high-water if it sits on the deepest call path, and this one does not. A frame-size figure is
+not a stack-budget figure. Full record: `../ledger-app/docs/benchmarks.md` §2026-09-07/09.
+
+⚠️ What it was predicted to trade: the heap loses the 1,664 B advice object and the **stack gains a known 224 B**
 (`size_of::<CombMirror<u64, 4, Secp256k1PM>>()`, niche-packed so the verifier's `None` path costs the
 same). On the device a heap shortfall reboots and a stack shortfall wipes, so check that 224 B
 against the curve statements' measured high-water rather than re-reading the depth. And the mirror
