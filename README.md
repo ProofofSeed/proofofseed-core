@@ -10,6 +10,8 @@ cargo test --release --workspace
 ```
 
 Debug and sequential builds are impractical for these circuits.
+`rust-toolchain.toml` pins the compiler to Rust 1.95.0, and `host/build.rs` refuses to build if this workspace's lockfile resolves a zkboo crate from a registry, which is what a `[patch.crates-io]` table does silently once a local version stops satisfying its requirement.
+It sits in `host` rather than `circuits` because a build script in `circuits` moves the Ledger app's application hash, that crate being linked into the device binary.
 The suite covers the statement outputs against their canonical vectors, the circuit fingerprints, the request vectors, the ranged-proving transcript, and a proof-byte pin (`host/tests/golden_streams.txt`) that fails when proof bytes move for any reason.
 
 The soundness default is 438 responses throughout this repository and its consumers: `(2/3)^438 <= 2^-256`, 128-bit post-quantum.
