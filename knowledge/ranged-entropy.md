@@ -64,6 +64,19 @@ A new variant must not create a (statement, part-count) collision with an existi
   `PROOF_FORMAT_ID` is the digest of a proof the *library* makes, so it moves when the library's framing changes but cannot see this repository's own use of that framing — the streaming verifier frames its binding with `TAG_CHALLENGE` directly.
   The tags are absorbed length-prefixed and in a fixed order, so no two can be read as one.
 
+## A lone range is refused, but only at the protocol's own rate
+
+A segment of a ranged proof is not structurally distinguishable from a complete proof of its own length.
+Nothing in the stream says how many commitments its challenges were derived over, so offering a `k`-response segment as a complete `k`-response proof is refused by the ordinary Fiat-Shamir check and nothing else: the verifier re-derives `k` challenges from the `k` commitments it was given, and an unrelated digest agrees with each of them one time in three.
+
+The segment therefore passes about `3^-k` of the time.
+Measured over sixty bindings each, 26/60 at `k = 1`, 10/60 at `k = 2` and 1/60 at `k = 3`.
+`host/tests/ranged.rs` pins that rate, and buys its own refusal test off by using a twenty-response range rather than by any property of ranged proving.
+
+This corrects two claims.
+"A lone range cannot be verified by itself" was wrong; and the refusal of a `[0, 2)` slice of four that the device showed on 2026-08-21 was one draw of a one-in-nine event, not a demonstration.
+At a deployment count the number is negligible, so nothing about ranged proving changes — what changes is that the refusal is the protocol's soundness and must be quoted as such.
+
 ## Residual caveats
 
 Mixing app versions across the runs of one ranged proof is unsupported.

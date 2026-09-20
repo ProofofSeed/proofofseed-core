@@ -13,7 +13,8 @@ The library exists and every consumer is on it.
 There is one implementation of the statements, and a change here reaches the device app, the command-line tool and the Python package at once.
 The only divergence is additive: this library carries `WitnessMaterial::Seed` and `::Mnemonic` for the software-wallet provers, which the device app has no use for.
 
-The stack is on zkboo v1.2.0 plus the assertion, advice and format-identity release, ported 2026-09-04 and 2026-09-06 and confirmed on hardware 2026-09-07 and 2026-09-09.
+The stack is on zkboo 1.3.0, ported 2026-09-20; the releases before it were confirmed on hardware 2026-09-07 and 2026-09-09, and 1.3.0 has not been.
+It moved the three BIP-32 secp256k1 derivations, so those three statements' fingerprints, proof bytes, sizes and device stack figures are all of superseded circuits.
 `DETERMINISTIC_ENTROPY_VERSION` is 4.
 What each release required, and what was measured to establish that nothing else moved, is in [`knowledge/zkboo-port-record.md`](knowledge/zkboo-port-record.md).
 

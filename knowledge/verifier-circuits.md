@@ -40,6 +40,22 @@ A verifier cannot compute those and does not need to: they are witness values, a
 `shaped` therefore hands the comb no scalar to follow, and `new` hands it the real one.
 The two build the same circuit, gate for gate — only where a slope's value comes from differs — so their fingerprints agree, which `circuits/tests/fingerprint.rs` pins.
 
+## A wrong circuit is refused by soundness, not by structure
+
+Rebuilding the wrong circuit — the wrong witness shape, the wrong chain code, the wrong index, the wrong family — does not make verification fail outright.
+The replay of a single response completes anyway often enough to matter, and the refusal is then only that the re-derived Fiat-Shamir challenges disagree.
+Measured on the master key at one response: a wrong witness length is accepted about one time in nine, and a wrong expected output about one time in three; at four responses the second is about one in fifty, and at the deployment count of 438 neither is anything.
+
+Two consequences.
+
+A negative test written at a small response count is a coin flip, not a check, and a deterministic one: the entropy is fixed, so the same tree always gives the same answer and the dice are re-rolled only when a release moves the circuit.
+Two such tests in this repository passed for months and turned red on the zkboo 1.3.0 port for no reason but that — one at two responses (1 in 81) and one lone-range refusal also at two (1 in 9).
+Every refusal in this suite that is soundness rather than a length or parse check now runs at sixteen or twenty responses, and the two rates are pinned directly by `host/tests/seed_statements.rs` and `host/tests/ranged.rs`.
+
+And it is why the software provers do not inherit the problem.
+`proofofseed-cli` and the `proofofseed` Python package carry a sidecar that commits to the expected output, and they check that commitment before any replay, so a wrong output is refused structurally and at any response count.
+The library's own `verify` has no sidecar and no such check.
+
 ## Statement outputs are taken from execution, never recomputed
 
 `curve_statement_output` and `hardened_child_output` execute the real circuit with the supplied witness rather than recomputing what the circuit ought to produce.

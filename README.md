@@ -31,7 +31,7 @@ See [`knowledge/assertion-word.md`](knowledge/assertion-word.md).
 
 ## Dependencies
 
-The `zkboo` crates at 1.2.0, resolved to the local working trees under `<zkboo>` by the workspace's `[patch.crates-io]`.
+The `zkboo` crates at 1.3.0 — `zkboo-keccak` and `zkboo-ripemd160` stayed at 1.2.0 — resolved to the local working trees under `<zkboo>` by the workspace's `[patch.crates-io]`.
 That release is not on crates.io yet, and every earlier published version is yanked.
 The proof hash is Keccak-256 and is this ecosystem's to supply, in `proofofseed_circuits::hasher`.
 See [`knowledge/dependencies.md`](knowledge/dependencies.md), which records why a patch table can disengage in silence.

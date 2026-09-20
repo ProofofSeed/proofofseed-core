@@ -87,3 +87,13 @@ Had change 2 touched a proof byte the `raw/public_key` pair would have said so, 
 
 Independently, all eight circuit fingerprints were unchanged across both releases, as the upstream release said they would be.
 The current set is tabulated in `../../ledger-app/knowledge/benchmarks.md`.
+
+**2026-09-20**, against zkboo 1.3.0, which makes the BIP-32 derivations assert the validity conditions BIP-32 states.
+Five rows moved and four did not, and the split is again the finding: the two statements that gained assertions moved, and the six other statements' rows did not.
+
+- `raw/master_key/n2` +198 and the four `derived/hardened_child` rows +300, +134, +67 and +99.
+  `master_key` now asserts a non-zero `IL` below the group order, and `hardened_child_key` asserts `IL` below the order and a non-zero child key, so both statements carry gates they did not carry, at +99 B per response on the estimator's fixed challenge.
+  The hardened-child segments still sum to the full row (103,516 + 51,758 + 51,790 = 207,064), and the two single-response segments now differ by 32 B where they were equal, that statement's 32-byte parent key appearing with one challenge and not the other.
+- `raw/bip39-r2/n2`, `derived/slip10_child/n4/full` and both `raw/public_key` rows were byte-identical in digest and length.
+  BIP-39 and SLIP-10 reach no secp256k1 private key, and the public-key statement derives none, so none of them has a BIP-32 validity condition to assert.
+  That pair of `derived/` and `raw/` controls is what says the release moved the two circuits and not the transcript: `DETERMINISTIC_ENTROPY_VERSION` did not move, and a transcript change would have taken `slip10_child` with it.
