@@ -5,55 +5,9 @@
 //!
 //! Run: `cargo run --release -p proofofseed-host --example profile_seed_statements`
 
-use zkboo::backend::{Backend, Frontend};
-use proofofseed_circuits::assert_nothing;
-use zkboo::circuit::Circuit;
+use proofofseed_circuits::{HardenedChildCircuit, MasterKeyCircuit};
 use zkboo::executor::{ExecOptions, exec, OwnedFlexibleWordPool};
-use zkboo_bip32::{hardened_child_key, master_key};
 use zkboo_profiling::{profile, ProfilingData};
-
-struct MasterKeyCircuit {
-    seed: Vec<u8>,
-}
-
-impl Circuit for MasterKeyCircuit {
-    fn exec<B: Backend>(&self, frontend: &Frontend<B>) {
-        let seed = self
-            .seed
-            .iter()
-            .map(|&b| frontend.input(b))
-            .collect::<Vec<_>>();
-        let (il, ir) = master_key(frontend.allocator(), seed);
-        il.into_iter().for_each(|w| frontend.output(w));
-        ir.into_iter().for_each(|w| frontend.output(w));
-        assert_nothing(frontend);
-    }
-}
-
-struct HardenedChildCircuit {
-    chain_code: Vec<u8>,
-    parent_priv: Vec<u8>,
-    index: u32,
-}
-
-impl Circuit for HardenedChildCircuit {
-    fn exec<B: Backend>(&self, frontend: &Frontend<B>) {
-        let cc = self
-            .chain_code
-            .iter()
-            .map(|&b| frontend.input(b))
-            .collect::<Vec<_>>();
-        let pk = self
-            .parent_priv
-            .iter()
-            .map(|&b| frontend.input(b))
-            .collect::<Vec<_>>();
-        let (child, cc_out) = hardened_child_key(frontend.allocator(), cc, pk, self.index);
-        frontend.output(child);
-        cc_out.into_iter().for_each(|w| frontend.output(w));
-        assert_nothing(frontend);
-    }
-}
 
 fn report(name: &str, prof: &ProfilingData) {
     println!("\n── {name} ────────────────────────────────");
