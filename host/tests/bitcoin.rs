@@ -148,7 +148,10 @@ fn account_proof_round_trips_with_asserted_params_and_binding() {
     // binding-bound, proven and verified in the device configuration. Each negative
     // corrupts exactly one input of the verification that just passed, naming the
     // check that refuses it.
-    const N: usize = 4;
+    // 16 responses, not the 4 this used to use: every refusal below is ZKBoo's own
+    // soundness rather than a structural check, so a wrong circuit or output is accepted
+    // with probability about 3^-N. At 4 that is one run in eighty-one.
+    const N: usize = 16;
     let binding = b"bitcoin-recovery-tx";
     for purpose in PURPOSES {
         let circuit = account_circuit(purpose);

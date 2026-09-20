@@ -10,7 +10,11 @@ use proofofseed_host::harness::{gen_stream, output_of};
 use proofofseed_host::{verify, verify_with_shape};
 
 const BINDING: &[u8] = b"seed-statement-binding";
-const N: usize = 2;
+
+/// Enough responses that a wrong circuit's chance of verifying anyway, about `9^-N`, is
+/// not something a test run will see. The refusals below are soundness, not structure:
+/// see `a_wrong_shape_is_refused_at_the_protocols_own_rate_and_no_better`.
+const N: usize = 20;
 
 /// A realistic BIP-39 seed: 64 bytes, as PBKDF2-HMAC-SHA512 produces.
 fn real_seed() -> Vec<u8> {
@@ -103,6 +107,41 @@ fn a_bip39_proof_of_a_real_mnemonic_verifies_when_the_shape_and_salt_are_given()
         ),
         "a wrong mnemonic length must not verify",
     );
+}
+
+#[test]
+fn a_wrong_shape_is_refused_at_the_protocols_own_rate_and_no_better() {
+    // 🚨 Verifying under a circuit of the wrong witness shape is refused by ZKBoo's own
+    // soundness and by nothing else. A response whose challenge does not put party 2's
+    // input share on the wire does not desynchronise the stream when the shape is wrong,
+    // and the re-derived challenge then has to disagree as well — so a single response
+    // of a 64-byte-seed proof is accepted under a 16-byte circuit about one time in nine.
+    //
+    // The tests above buy their certainty by using twenty responses. At the deployment
+    // count of 438 the figure is nothing; at the two responses these tests used until
+    // 2026-09-20 it was one in eighty-one, which is a coin flip and not a check.
+    let trials = 90u32;
+    for length in [None, Some(16usize), Some(32), Some(63)] {
+        let accepted = (0..trials)
+            .filter(|t| {
+                let circuit = MasterKeyCircuit { seed: real_seed() };
+                let output = output_of(&circuit);
+                let stream = gen_stream(&circuit, 1, format!("shape-{t}").as_bytes(), BINDING);
+                verify_with_shape(
+                    MASTER_KEY, &output, &stream, 1, BINDING, 2048, None, None, 0, length, None,
+                )
+            })
+            .count() as u32;
+        // Three binomial standard deviations either side of `trials / 9`, plus one, so the
+        // band excludes both a refusal that has become structural and one that has stopped.
+        let expected = trials / 9;
+        let slack = (3.0 * (f64::from(trials) * 8.0 / 81.0).sqrt()).ceil() as u32 + 1;
+        assert!(
+            accepted.abs_diff(expected) <= slack,
+            "a witness length of {length:?} was accepted {accepted} of {trials} times, \
+             against the {expected} that one in nine predicts (slack {slack})"
+        );
+    }
 }
 
 #[test]

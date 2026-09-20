@@ -12,7 +12,13 @@ use proofofseed_host::harness::{gen_stream, gen_stream_range, output_of};
 use proofofseed_host::verify;
 use zeroize::Zeroizing;
 
-const N: usize = 6;
+/// Sixteen responses. Every refusal in this file that is not a length check is ZKBoo's
+/// own soundness, accepted with probability about `3^-N`, so a small count makes a
+/// negative a coin flip rather than a check.
+const N: usize = 16;
+/// A range long enough that a Fiat-Shamir agreement by chance, at `3^-LONG`, is not a
+/// thing a test run will see.
+const LONG: usize = 20;
 const BINDING: &[u8] = b"ranged-recovery-tx";
 
 /// A representative proof request for the hardened-child test-vector statement,
@@ -55,7 +61,7 @@ fn a_partition_of_ranges_reassembles_the_proof_and_verifies() {
     // A coarse partition and the all-singletons partition, each segment produced by
     // an independent prover run (fresh challenge phase included), as separate
     // devices would.
-    for partition in [vec![(0, 2), (2, 3), (3, 6)], (0..N).map(|i| (i, i + 1)).collect()] {
+    for partition in [vec![(0, 2), (2, 3), (3, N)], (0..N).map(|i| (i, i + 1)).collect()] {
         let assembled: Vec<u8> = partition
             .iter()
             .flat_map(|&range| gen_stream_range(&circuit, N, range, &*entropy, BINDING))
@@ -68,24 +74,82 @@ fn a_partition_of_ranges_reassembles_the_proof_and_verifies() {
     );
 }
 
+/// A lone range `[0, length)`, drawn from a `total`-response proof under `binding` and
+/// offered as though it were a complete proof of its own length.
+fn lone_range_passes(total: usize, length: usize, binding: &[u8]) -> bool {
+    let circuit = hardened_child_circuit();
+    let request = ProofRequest {
+        num_iters: total,
+        binding: binding.to_vec(),
+        ..request(Some((0, total as u16)))
+    };
+    let digest = request_transcript_digest(HARDENED_CHILD, &request, &[b"witness-material"]);
+    let entropy = deterministic_seed_entropy(&circuit, &digest);
+    let segment = gen_stream_range(&circuit, total, (0, length), &*entropy, binding);
+    verify(
+        HARDENED_CHILD,
+        &output_of(&circuit),
+        &segment,
+        length,
+        binding,
+        0,
+        None,
+        None,
+        0,
+    )
+}
+
 #[test]
 fn a_lone_range_is_not_a_complete_proof() {
     let circuit = hardened_child_circuit();
     let output = output_of(&circuit);
     let entropy = entropy(&[b"witness-material"]);
-    let segment = gen_stream_range(&circuit, N, (0, 2), &*entropy, BINDING);
-    // Its twin — a genuine 2-response proof — verifies at count 2; the segment
+    // Its twin — a genuine LONG-response proof — verifies at that count; the segment
     // carries the same number of responses but its challenges were derived over all
-    // N commitments, so passing it off as a complete 2-response proof must refuse.
-    let twin = gen_stream(&circuit, 2, &*entropy, BINDING);
+    // 2·LONG commitments, so passing it off as a complete proof must refuse.
+    //
+    // The range is long because the refusal is probabilistic; see the test below.
+    let twin = gen_stream(&circuit, LONG, &*entropy, BINDING);
     assert!(
-        verify(HARDENED_CHILD, &output, &twin, 2, BINDING, 0, None, None, 0),
-        "the 2-response twin must verify"
+        verify(HARDENED_CHILD, &output, &twin, LONG, BINDING, 0, None, None, 0),
+        "the {LONG}-response twin must verify"
     );
     assert!(
-        !verify(HARDENED_CHILD, &output, &segment, 2, BINDING, 0, None, None, 0),
+        !lone_range_passes(2 * LONG, LONG, BINDING),
         "a lone range must not pass as a complete proof of its own length"
     );
+}
+
+#[test]
+fn a_lone_range_is_refused_at_the_protocols_own_rate_and_no_better() {
+    // 🚨 A lone range is not structurally distinguishable from a complete proof of its
+    // own length. Nothing in the stream says which of `num_iters` commitments its
+    // challenges were derived over, so the refusal is the ordinary Fiat-Shamir one: the
+    // verifier re-derives `length` challenges from the commitments it was given, and an
+    // unrelated digest still agrees with each of them one time in three.
+    //
+    // A short range is therefore accepted about `3^-length` of the time, which the test
+    // above buys off by being long rather than by any property of ranged proving. This
+    // is what the 2-response refusal the device once demonstrated actually showed: one
+    // draw of a 1-in-9 event.
+    let trials = 60u32;
+    for (length, expected) in [(1usize, trials / 3), (2, trials / 9), (3, trials / 27)] {
+        let passes = (0..trials)
+            .filter(|t| lone_range_passes(N, length, format!("lone-range-{t}").as_bytes()))
+            .count() as u32;
+        // Three standard deviations of the binomial either side, floored at one trial,
+        // so the band is wide enough not to flake and narrow enough to exclude both a
+        // refusal that has become structural and one that has stopped happening.
+        let share = 3u32.pow(length as u32);
+        let sigma =
+            (f64::from(trials) * f64::from(share - 1) / f64::from(share).powi(2)).sqrt();
+        let slack = (3.0 * sigma).ceil() as u32 + 1;
+        assert!(
+            passes.abs_diff(expected) <= slack,
+            "a lone range of {length} passed {passes} of {trials} times, against the \
+             {expected} that 3^-{length} predicts (slack {slack})"
+        );
+    }
 }
 
 #[test]

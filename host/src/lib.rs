@@ -837,6 +837,7 @@ mod tests {
         PubKeyCircuit, Slip10ChildCircuit,
     };
     use std::collections::BTreeSet;
+    use zkboo::Repetitions;
     use core::cell::RefCell;
     use zkboo::prover::challenge::ChallengeBuilder;
     use zkboo::prover::proof::{ProofOptions, build_proof};
@@ -1001,6 +1002,9 @@ mod tests {
         // verifies against them, and one made with a neighbouring key does not. Without
         // the second half this passes for a helper that returns any fixed circuit's
         // output, which is exactly the failure the benchmark's `verified: None` rows hid.
+        // 16 responses: the refusal of a neighbouring parent's output is ZKBoo's own
+        // soundness, accepted with probability about 3^-n, so a small count makes the
+        // negative a coin flip rather than a check.
         let cc = [7u8; 32];
         let key = [3u8; 32];
         let other = [4u8; 32];
@@ -1011,17 +1015,17 @@ mod tests {
             parent_priv: key.to_vec(),
             index: hardened,
         };
-        let stream = gen_stream(&real, 4, b"e", b"tx");
+        let stream = gen_stream(&real, 16, b"e", b"tx");
         let expected = hardened_child_statement_output(0, &key, &cc, hardened).unwrap();
         assert_eq!(expected, output_of(&real), "helper must execute the real circuit");
         assert!(
-            verify(HARDENED_CHILD, &expected, &stream, 4, b"tx", 0, Some(&cc), Some(hardened), 0),
+            verify(HARDENED_CHILD, &expected, &stream, 16, b"tx", 0, Some(&cc), Some(hardened), 0),
             "hardened child should verify against the supplied parent's output"
         );
         let wrong = hardened_child_statement_output(0, &other, &cc, hardened).unwrap();
         assert_ne!(wrong, expected, "a different parent must give a different output");
         assert!(
-            !verify(HARDENED_CHILD, &wrong, &stream, 4, b"tx", 0, Some(&cc), Some(hardened), 0),
+            !verify(HARDENED_CHILD, &wrong, &stream, 16, b"tx", 0, Some(&cc), Some(hardened), 0),
             "a neighbouring parent's output must be rejected"
         );
 
@@ -1030,12 +1034,12 @@ mod tests {
             parent_priv: key.to_vec(),
             index: hardened,
         };
-        let sl_stream = gen_stream(&sl, 4, b"e", b"tx");
+        let sl_stream = gen_stream(&sl, 16, b"e", b"tx");
         let sl_expected = hardened_child_statement_output(1, &key, &cc, hardened).unwrap();
         assert_ne!(sl_expected, expected, "the two families are different circuits");
         assert!(
             verify(
-                HARDENED_CHILD, &sl_expected, &sl_stream, 4, b"tx", 0, Some(&cc),
+                HARDENED_CHILD, &sl_expected, &sl_stream, 16, b"tx", 0, Some(&cc),
                 Some(hardened), 1
             ),
             "slip-10 child should verify against the supplied parent's output"
@@ -1050,32 +1054,34 @@ mod tests {
     #[test]
     fn curve_statement_outputs_for_a_supplied_key_verify_a_real_proof() {
         // The same check for the curve statements, which the benchmark also recorded as
-        // unverified until their outputs could be derived. One response each: these are
-        // the expensive statements and the property under test does not need more.
+        // unverified until their outputs could be derived. Eight responses, not the one
+        // this used to use: the positive needs no more than one, but the negative is
+        // ZKBoo's own soundness, and a wrong output is accepted about 3^-n of the time —
+        // at one response that is better than one run in four.
         let key = [3u8; 32];
         let other = [4u8; 32];
         let cc = [7u8; 32];
 
         let pk = PubKeyCircuit::<ComputedComb>::new(key.to_vec());
-        let pk_stream = gen_stream(&pk, 1, b"e", b"tx");
+        let pk_stream = gen_stream(&pk, 8, b"e", b"tx");
         let pk_expected = curve_statement_output(PUBLIC_KEY, &key, None, None).unwrap();
         assert!(
-            verify(PUBLIC_KEY, &pk_expected, &pk_stream, 1, b"tx", 0, None, None, 0),
+            verify(PUBLIC_KEY, &pk_expected, &pk_stream, 8, b"tx", 0, None, None, 0),
             "public key should verify against the supplied key's output"
         );
         let pk_wrong = curve_statement_output(PUBLIC_KEY, &other, None, None).unwrap();
         assert_ne!(pk_wrong, pk_expected);
         assert!(
-            !verify(PUBLIC_KEY, &pk_wrong, &pk_stream, 1, b"tx", 0, None, None, 0),
+            !verify(PUBLIC_KEY, &pk_wrong, &pk_stream, 8, b"tx", 0, None, None, 0),
             "a neighbouring key's public key must be rejected"
         );
 
         let nc = NormalChildCircuit::<ComputedComb>::new(cc.to_vec(), key.to_vec(), 0);
-        let nc_stream = gen_stream(&nc, 1, b"e", b"tx");
+        let nc_stream = gen_stream(&nc, 8, b"e", b"tx");
         let nc_expected =
             curve_statement_output(NORMAL_CHILD, &key, Some(&cc), Some(0)).unwrap();
         assert!(
-            verify(NORMAL_CHILD, &nc_expected, &nc_stream, 1, b"tx", 0, Some(&cc), Some(0), 0),
+            verify(NORMAL_CHILD, &nc_expected, &nc_stream, 8, b"tx", 0, Some(&cc), Some(0), 0),
             "normal child should verify against the supplied parent's output"
         );
 
@@ -1158,6 +1164,10 @@ mod tests {
         // use, and it is not to appear in these crates.)
         assert_eq!(n_eps(64), 110);
         assert_eq!(n_eps(1), 2);
+        // zkboo 1.3.0 states the same count from the post-quantum security level, by a
+        // rational approximation where this crate divides floating-point logarithms.
+        // Its argument is post-quantum bits, so 128 there is the 256 above.
+        assert_eq!(n_eps(256), Repetitions::for_pq_security_bits(128).count());
     }
 
     #[test]
