@@ -6,18 +6,18 @@ license = "LGPL-3.0-or-later"
 description = "Host-side proof-of-seed library: the streaming ZKBoo verifier, the host prover (full and ranged), and executor-based derivation over the shared statement circuits."
 
 [dependencies]
-zkboo = { version = "1.2.0", default-features = false, features = [
+zkboo = { version = "1.3.0", default-features = false, features = [
     "u32",
     "u64",
 ] }
-zkboo-bip32 = { version = "1.2.0" }
+zkboo-bip32 = { version = "1.3.0" }
 # Path within this workspace; the version applies on publication.
 proofofseed-circuits = { version = "0.1.0", path = "../circuits" }
 # Zeroizing wrappers on all derived key material.
 zeroize = { version = "1", default-features = false }
 # Proof-size/memory numbers exposed by the shared statement plumbing (profiling,
 # dry-run planning) rather than re-derived by each frontend.
-zkboo-profiling = { version = "1.2.0" }
+zkboo-profiling = { version = "1.3.0" }
 # OS randomness for fresh (rangeless) prover entropy.
 getrandom = "0.2"
 
@@ -28,13 +28,13 @@ getrandom = "0.2"
 proofofseed-circuits = { path = "../circuits", features = ["flash-comb"] }
 # For the proof-of-seed diagnostic examples (gate counts, refcounts, prover memory)
 # and the fixed-base comb table generator.
-zkboo-ecc = { version = "1.2.0" }
-zkboo-modular = { version = "1.2.0" }
+zkboo-ecc = { version = "1.3.0" }
+zkboo-modular = { version = "1.3.0" }
 # Circuit fingerprints, for the salt-secrecy property tests.
-zkboo-circuit-hash = { version = "1.2.0" }
+zkboo-circuit-hash = { version = "1.3.0" }
 # Isolating the cost of a secret PBKDF2 salt (examples/salt_secrecy_cost.rs).
-zkboo-hmac = { version = "1.2.0" }
-zkboo-sha2 = { version = "1.2.0" }
+zkboo-hmac = { version = "1.3.0" }
+zkboo-sha2 = { version = "1.3.0" }
 # Independent BIP-32 reference for the Bitcoin recovery-statement vectors.
 bitcoin = "0.32"
 # The device's own allocator, so an experiment can charge a prove against a heap of the

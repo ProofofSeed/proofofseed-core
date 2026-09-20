@@ -7,7 +7,7 @@ description = "The six ProofofSeed statements as ZKBoo circuits, with test vecto
 
 [dependencies]
 # Resolved to the local working trees by the workspace root's [patch.crates-io].
-zkboo = { version = "1.2.0", default-features = false, features = [
+zkboo = { version = "1.3.0", default-features = false, features = [
     "u32",
     "u64",
 ] }
@@ -15,15 +15,15 @@ zkboo = { version = "1.2.0", default-features = false, features = [
 zeroize = { version = "1", default-features = false }
 # `bip39_seed_with_salt_words`: the BIP-39 salt is witness here, so it has to be
 # supplied as circuit words rather than allocated as public constants.
-zkboo-bip32 = { version = "1.2.0" }
-zkboo-ecc = { version = "1.2.0" }
+zkboo-bip32 = { version = "1.3.0" }
+zkboo-ecc = { version = "1.3.0" }
 # Circuit-structure fingerprinting, bound into the deterministic prover entropy of
 # the ranged proving mode (see src/ranged.rs).
-zkboo-circuit-hash = { version = "1.2.0" }
+zkboo-circuit-hash = { version = "1.3.0" }
 # Emitting a curve statement's affine coordinates directly (`montgomery_output`), and,
 # under `flash-comb`, reconstructing the precomputed Montgomery limbs. Already in the
 # build graph as a dependency of zkboo-ecc, so naming it directly costs nothing.
-zkboo-modular = { version = "1.2.0" }
+zkboo-modular = { version = "1.3.0" }
 # The proof hash of the whole ProofofSeed ecosystem (src/hasher.rs). zkboo defines the
 # `Hasher` trait and ships no concrete hash, so the choice is ours to make and to share.
 tiny-keccak = { version = "2.0", default-features = false, features = ["keccak"] }
@@ -40,6 +40,6 @@ flash-comb = []
 # builds the flash tables. Without it the parity tests would compile to nothing
 # whenever the feature was off — a check that silently disappears is not a check.
 proofofseed-circuits = { path = ".", features = ["flash-comb"] }
-zkboo-circuit-hash = { version = "1.2.0" }
-zkboo-ecc = { version = "1.2.0" }
-zkboo-modular = { version = "1.2.0" }
+zkboo-circuit-hash = { version = "1.3.0" }
+zkboo-ecc = { version = "1.3.0" }
+zkboo-modular = { version = "1.3.0" }
