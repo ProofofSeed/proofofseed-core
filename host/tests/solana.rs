@@ -167,7 +167,10 @@ fn solana_account_proof_round_trips_with_asserted_params_and_binding() {
     // witness = the parent node m/44'/501', anchored on the asserted chain code and
     // hardened index, bound to a transaction stand-in. Each negative corrupts exactly
     // one input of the verification that just passed.
-    const N: usize = 4;
+    // 16 responses, not the 4 this used to use: every refusal below is ZKBoo's own
+    // soundness rather than a structural check, so a wrong circuit or output is accepted
+    // with probability about 3^-N. At 4 that is one run in eighty-one.
+    const N: usize = 16;
     let binding = b"solana-recovery-tx";
     let seed: Vec<u8> = (0..64).collect();
     let nodes = slip10_chain(&seed, &[44, 501]);
@@ -216,7 +219,10 @@ fn solana_account_proof_round_trips_with_asserted_params_and_binding() {
 
 #[test]
 fn slip10_master_round_trips_and_families_do_not_cross_verify() {
-    const N: usize = 4;
+    // 16 responses, not the 4 this used to use: every refusal below is ZKBoo's own
+    // soundness rather than a structural check, so a wrong circuit or output is accepted
+    // with probability about 3^-N. At 4 that is one run in eighty-one.
+    const N: usize = 16;
     // Family-1 master statement (canonical SLIP-0010 vector 1 circuit).
     let slip10 = slip10_master_circuit();
     let output = output_of(&slip10);

@@ -150,11 +150,12 @@ zeroize_on_drop!(MasterKeyCircuit: seed);
 
 impl Circuit for MasterKeyCircuit {
     fn exec<B: Backend>(&self, frontend: &Frontend<B>) {
-        let seed = self.seed.iter().map(|&b| frontend.input(b)).collect::<Vec<_>>();
-        let (il, ir) = master_key(frontend.allocator(), seed);
-        il.into_iter().for_each(|w| frontend.output(w));
-        ir.into_iter().for_each(|w| frontend.output(w));
-        assert_nothing(frontend);
+        Assertions::scope(frontend, |assertions| {
+            let seed = self.seed.iter().map(|&b| frontend.input(b)).collect::<Vec<_>>();
+            let (il, ir) = master_key(frontend.allocator(), seed, assertions);
+            il.into_iter().for_each(|w| frontend.output(w));
+            ir.into_iter().for_each(|w| frontend.output(w));
+        });
     }
 }
 
@@ -168,21 +169,27 @@ zeroize_on_drop!(HardenedChildCircuit: parent_priv);
 
 impl Circuit for HardenedChildCircuit {
     fn exec<B: Backend>(&self, frontend: &Frontend<B>) {
-        let chain_code = self
-            .chain_code
-            .iter()
-            .map(|&b| frontend.alloc(b))
-            .collect::<Vec<_>>();
-        let parent_priv = self
-            .parent_priv
-            .iter()
-            .map(|&b| frontend.input(b))
-            .collect::<Vec<_>>();
-        let (child_priv, child_chain_code) =
-            hardened_child_key(frontend.allocator(), chain_code, parent_priv, self.index);
-        frontend.output(child_priv);
-        child_chain_code.into_iter().for_each(|w| frontend.output(w));
-        assert_nothing(frontend);
+        Assertions::scope(frontend, |assertions| {
+            let chain_code = self
+                .chain_code
+                .iter()
+                .map(|&b| frontend.alloc(b))
+                .collect::<Vec<_>>();
+            let parent_priv = self
+                .parent_priv
+                .iter()
+                .map(|&b| frontend.input(b))
+                .collect::<Vec<_>>();
+            let (child_priv, child_chain_code) = hardened_child_key(
+                frontend.allocator(),
+                chain_code,
+                parent_priv,
+                self.index,
+                assertions,
+            );
+            frontend.output(child_priv);
+            child_chain_code.into_iter().for_each(|w| frontend.output(w));
+        });
     }
 }
 

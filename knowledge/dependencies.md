@@ -2,8 +2,11 @@
 
 ## The zkboo crates
 
-The `zkboo` crates are required at 1.2.0 and resolved to the local working trees under `<zkboo>` by the workspace's `[patch.crates-io]`.
+The `zkboo` crates are required at 1.3.0 — `zkboo-keccak` and `zkboo-ripemd160` stayed at 1.2.0 and are required there — and resolved to the local working trees under `<zkboo>` by the workspace's `[patch.crates-io]`.
 That release is not on crates.io; every earlier published version is yanked.
+
+The requirements are caret requirements, so a local tree that moves within the major version satisfies them and the patch table stays engaged.
+They are nonetheless moved to the release the trees carry, because a requirement left behind states something untrue and stops being the record of what this repository is built against.
 
 A `[patch.crates-io]` entry is ignored in silence once the local crate's version stops satisfying the requirement, and cargo resolves the published crate instead with no warning.
 When the zkboo crates take a major version, every requirement here and in all three consumers has to move with them, or the graph ends up holding two incompatible copies of one crate.

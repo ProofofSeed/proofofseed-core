@@ -60,6 +60,33 @@ The full record is `../../ledger-app/knowledge/benchmarks.md`.
 The mirror also runs once per circuit execution rather than once per proof — 876 evaluations against one at 438 responses — which zkboo measures at +0.33% to +0.50% of prover wall clock.
 That is a host figure at window width 5 over precomputed tables, on arithmetic whose long dependent 256-bit multiply-reduce chain is the shape most likely to scale differently on a 32-bit core, so the per-response device law must not be restated from it.
 
+## zkboo 1.3.0, 2026-09-20
+
+The release closes two holes, one in the BIP-32 derivations and one in verification.
+
+- **The BIP-32 derivations assert the validity conditions BIP-32 states.**
+  `master_key` asserts a non-zero `IL` below the group order; `hardened_child_key` and `normal_child_key` assert `IL` below the order and a non-zero child key.
+  `master_key` and `hardened_child_key` take an assertion accumulator, which they did not before, so `MasterKeyCircuit` and `HardenedChildCircuit` open an `Assertions::scope` and thread it where they ended in `assert_nothing`.
+  Their flag stops being the constant one and starts meaning something.
+- **`verify`, `par_verify` and `Verifier::new` take the `Repetitions` a proof is required to carry**, and reject a proof of any other length; an empty proof verified against any output before.
+  Nothing here calls them: `verify_stream` is this repository's own streaming verifier, and it already required an exact count, refused a zero count and refused trailing bytes.
+  What the release adds is a second statement of the count formula, `Repetitions::for_pq_security_bits`, which `n_eps` is now pinned against at the deployment parameter.
+
+Three of the eight statement fingerprints moved — the three BIP-32 secp256k1 derivations — and five did not.
+The BIP-39, SLIP-10 and public-key statements reach no secp256k1 private key to have a validity condition about.
+
+| family | statement      | before                                                             | after                                                              |
+| ------ | -------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| 0      | master key     | `348b715964496e0d3d1bee8ab63aca573a76c12b3b1c5d125ac884f076febd87` | `1c8f511db84986767c3e70b8c7d4b6f02fd187d5a761ad45e526819f44f9dd69` |
+| 0      | hardened child | `bd121f6f7aa11c76705c717779c1a7c45aff1e2fa6680183a84e62fa0ae46ebb` | `72936f446cf7905dcd6e5bc4f66e583b479bd74b3e338b8ff6542cdd9b41938f` |
+| 0      | normal child   | `f26f9f186016bf142d39a6eaab53a9e07dd8a775268a01d46627850fa7d1ce39` | `11041aad1780fe29a2c115321af24234db18a31142dbed4227057f5760946f7e` |
+
+The cost is +99 B per response on the master key and the hardened child, and about +100 B on the normal child, against the streamed sizes the estimator reports.
+The proof-byte evidence, including the rows that did not move, is in [`proof-byte-pins.md`](proof-byte-pins.md).
+
+**No device figure carries over for those three statements**, and that is more than a size correction: build D's compiled stack floor was derived from the master key's painted depth and largest sampled fall, and build C's from the hardened child's, both measured on circuits this release changed.
+`../../ledger-app/host/validate_instruments.py` now checks the two readings against the figures it holds instead of assuming them.
+
 ## Traps this cost
 
 - A `[patch.crates-io]` entry is ignored in silence once the local version stops satisfying the requirement, and cargo resolves the published crate instead.

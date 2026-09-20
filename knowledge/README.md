@@ -4,7 +4,7 @@ Design records for the shared proof-of-seed library.
 
 - [`plan.md`](plan.md) — the plan of record: architecture, milestones and their acceptance tests.
 - [`assertion-word.md`](assertion-word.md) — the trailing assertion word, `checked_payload`, and why uniform output shape is this suite's discipline.
-- [`verifier-circuits.md`](verifier-circuits.md) — what a verifier must know to rebuild a circuit: public parameters, witness shape, and the BIP-39 salt.
+- [`verifier-circuits.md`](verifier-circuits.md) — what a verifier must know to rebuild a circuit: public parameters, witness shape, the BIP-39 salt, and why a wrong circuit is refused by soundness rather than by structure.
 - [`ranged-entropy.md`](ranged-entropy.md) — ranged proving, the deterministic entropy derivation, and the invariant it rests on.
 - [`circuit-fingerprints.md`](circuit-fingerprints.md) — what a fingerprint commits to, why it leaks nothing, and the watchdog constraint.
 - [`comb-tables.md`](comb-tables.md) — comb table sources, the mirrored scalar, and stored field values against canonical residues.

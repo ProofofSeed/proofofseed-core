@@ -9,6 +9,17 @@ The word is a `u8`, so it is the last element of `Words::u8` whatever widths the
 Read a circuit's outputs through `checked_payload`, which removes the word and returns `None` when it is false.
 A zero secp256k1 scalar is the reachable false case: the comb asserts that `d·G` is finite, and no proof of a violated assertion verifies.
 
+## What each statement's word means
+
+Since zkboo 1.3.0 the three BIP-32 secp256k1 derivations assert the validity conditions BIP-32 states: the master key asserts a non-zero `IL` below the group order, and the two child derivations assert `IL` below the order and a non-zero child key.
+Their word carried the constant one before, so it said nothing about the statement and only that the circuit had been written to the shape.
+
+The other five statements still assert nothing of their own and end in `assert_nothing`: BIP-39 and the two SLIP-10 derivations reach no secp256k1 private key, and the public-key and address statements are given one rather than deriving it.
+Those three of the eight are where the word is still only a shape.
+
+A BIP-32 derivation reaches an invalid key with probability below `2^-127`, so no seed exercises the new assertions and no proof this suite makes will carry a false word for that reason.
+They are driven directly, over the values either side of the group order, by `<zkboo>/zkboo-bip32/tests/test_key_validity.rs`.
+
 The serialised form a verifier pins, `serialize_words`, keeps the word, because it is part of what the proof commits to.
 Only a caller consuming outputs as values — a derivation walk — wants it removed.
 

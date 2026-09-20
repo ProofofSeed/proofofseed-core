@@ -8,10 +8,8 @@
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use proofofseed_circuits::assert_nothing;
+use proofofseed_circuits::MasterKeyCircuit;
 use proofofseed_circuits::hasher::Keccak256Hasher;
-use zkboo::backend::{Backend, Frontend};
-use zkboo::circuit::Circuit;
 use zkboo::crypto::HashPRG;
 use zkboo::prover::challenge::Party;
 use zkboo::prover::proof::collectors::ResponseDataCollector;
@@ -19,7 +17,6 @@ use zkboo::prover::proof::ProofOptions;
 use zkboo::prover::prove;
 use zkboo::prover::views::OwnedFlexibleWordTriplePool;
 use zkboo::word::{CompositeWord, Word};
-use zkboo_bip32::master_key;
 
 // ---- tracking allocator ----
 static CURRENT: AtomicUsize = AtomicUsize::new(0);
@@ -50,23 +47,6 @@ type PV = HashPRG<H>;
 type S = [u8; 32];
 type RC = u8;
 type WTP = OwnedFlexibleWordTriplePool<RC>;
-
-struct MasterKeyCircuit {
-    seed: Vec<u8>,
-}
-impl Circuit for MasterKeyCircuit {
-    fn exec<B: Backend>(&self, frontend: &Frontend<B>) {
-        let seed = self
-            .seed
-            .iter()
-            .map(|&b| frontend.input(b))
-            .collect::<Vec<_>>();
-        let (il, ir) = master_key(frontend.allocator(), seed);
-        il.into_iter().for_each(|w| frontend.output(w));
-        ir.into_iter().for_each(|w| frontend.output(w));
-        assert_nothing(frontend);
-    }
-}
 
 // A discarding streaming sink: replicates the device DigestSink's lifecycle
 // (per-response new/push/finalize) without retaining anything.
