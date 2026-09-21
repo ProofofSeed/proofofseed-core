@@ -87,6 +87,9 @@ The proof-byte evidence, including the rows that did not move, is in [`proof-byt
 **No device figure carries over for those three statements**, and that is more than a size correction: build D's compiled stack floor was derived from the master key's painted depth and largest sampled fall, and build C's from the hardened child's, both measured on circuits this release changed.
 `../../ledger-app/host/validate_instruments.py` now checks the two readings against the figures it holds instead of assuming them.
 
+Confirmed on hardware 2026-09-21 (`../../ledger-app/knowledge/benchmarks.md` §2026-09-21): every proof verified, and the moved statements went no deeper — the master key painted 17,080 B with a largest fall of 1,928 B, against 17,184 B and 2,152 B before.
+Build D's floor holds; build C's had drifted out of its window through two statements this release did not touch, and is now a 16,640 B heap with a 2,496 B floor.
+
 ## Traps this cost
 
 - A `[patch.crates-io]` entry is ignored in silence once the local version stops satisfying the requirement, and cargo resolves the published crate instead.

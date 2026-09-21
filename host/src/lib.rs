@@ -1097,7 +1097,7 @@ mod tests {
 
     #[test]
     fn verifier_needs_only_public_params_not_witness_values() {
-        // Request-anchored verification (docs/real-witness.md): the verifier rebuilds
+        // Request-anchored verification (ledger-app knowledge/real-witness.md): the verifier rebuilds
         // the circuit from the public params it asserts, with a zeroed placeholder
         // witness, and a proof made with a *different* (here, the test-vector) witness
         // still verifies. The witness values are irrelevant to verification — only the

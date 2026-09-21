@@ -71,7 +71,8 @@ The secp256k1 fixed-base comb's precompute on the public base point is one: it i
 `gen_comb_table` writes the secp256k1 fixed-base comb table to `circuits/src/comb_table.rs` as flash-resident constant data, computing the same per-window multiples that `ComputedWindowTables` builds at run time, in Montgomery limbs.
 Re-run it if the curve or the default window width changes.
 
-`profile_mem` reports the streaming prover's heap and stack footprint per statement at the device's refcount width, for choosing a heap size.
+`profile_mem` reports the streaming prover's profiled heap and stack footprint per statement at the device's refcount width.
+It is a circuit-profile figure: the reductions it predicted in the 2026-08 optimisation round did not appear on the device, so it ranks statements and sizes nothing.
 
 ## Cost of specific decisions
 

@@ -114,7 +114,11 @@ impl ResponseDataCollector<[u8; 32], [u8; 32]> for DiscardSink {
 ///
 /// A conclusion previously drawn from these figures — that the normal-child statement
 /// cannot fit — was withdrawn for exactly this reason.
-const DEVICE_HEAP: usize = 13_312;
+///
+/// The budget is build C's heap, the largest of the device's builds, which serves the
+/// hardened child and the curve statements; the seed statements run on builds with less
+/// (`ledger-app/app/.cargo/config.toml`).
+const DEVICE_HEAP: usize = 16_640;
 
 fn peak_of<C: Circuit>(label: &str, circuit: &C) {
     PEAK.store(CURRENT.load(Ordering::Relaxed), Ordering::Relaxed);
@@ -183,6 +187,6 @@ fn main() {
         );
     }
 
-    println!("\nFor reference, the statement the SRAM split was chosen against:");
+    println!("\nFor reference, the statement build C's split was chosen against:");
     peak_of("hardened child (test-vector params)", &hardened_child_circuit());
 }

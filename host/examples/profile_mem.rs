@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 //
-//! Off-device prover-memory estimator. Reports the ZKBoo streaming prover's heap and
-//! stack footprint for each statement using the `u8` refcount type (the on-device
-//! estimate), so we can pick a HEAP_SIZE for the elephant build after the fixed-base
-//! comb scalar-mult landed (the comb's precomputed table may move the heap).
+//! Off-device prover-memory estimator: the ZKBoo streaming prover's profiled heap and
+//! stack footprint for each statement, with the device's `u8` refcount type. A circuit
+//! profile does not predict the device's heap; `knowledge/measurement-instruments.md`.
 //!
 //!     cargo run -p proofofseed-host --example profile_mem --release
 

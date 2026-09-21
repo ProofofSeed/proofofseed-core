@@ -18,7 +18,7 @@ The pass is a full execution of the circuit through a hashing backend, and it is
 On a secure element that is not merely slow but fatal, because the operating system's watchdog reboots the device out from under a command that stops answering, and this pass runs before the prover has emitted its first byte.
 
 Its cost is linear in the gate count, so the round count of a PBKDF2 circuit scales it without bound while leaving its memory flat.
-A BIP-39 circuit at 2048 rounds fingerprints in 553 times the time of one at 2 rounds, and 221 times that of a single-HMAC circuit, on the same heap.
+On the host, a BIP-39 circuit at 2048 rounds fingerprints in 271 times the time of one at 2 rounds, and 205 times that of the single-HMAC hardened child, at a heap that varies by under 200 B ([`host-benchmarks-2026-09-06.txt`](host-benchmarks-2026-09-06.txt), zkboo 1.2.0).
 
 A caller that can yield must therefore hook the pass rather than the prover alone, through `statement_fingerprint_hooked`.
 The hook is transcript-neutral: it observes backend operations and never touches the hasher, so the digest and the derived entropy are identical to the unhooked path.

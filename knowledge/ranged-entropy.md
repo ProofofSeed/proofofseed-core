@@ -58,6 +58,7 @@ A new variant must not create a (statement, part-count) collision with an existi
 `DETERMINISTIC_ENTROPY_VERSION` covers this module's own field layout, and is bumped by hand on any change to what the transcript absorbs or how.
 
 - Version 1 tracked the proof format by hand.
+- Version 2 absorbs `zkboo::PROOF_FORMAT_VERSION`, a four-byte counter, so that the proof format is tracked by the library rather than by this constant.
 - Version 3 absorbs `zkboo::PROOF_FORMAT_ID`, a 32-byte content-derived identity, in place of the four-byte counter it retired.
   A change to the emitted response bytes or the commitment preimages now moves the entropy mechanically, whether or not anyone remembers to touch the constant.
 - Version 4 adds the three domain-separation tags.

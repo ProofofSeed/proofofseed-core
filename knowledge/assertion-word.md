@@ -14,7 +14,8 @@ A zero secp256k1 scalar is the reachable false case: the comb asserts that `d·G
 Since zkboo 1.3.0 the three BIP-32 secp256k1 derivations assert the validity conditions BIP-32 states: the master key asserts a non-zero `IL` below the group order, and the two child derivations assert `IL` below the order and a non-zero child key.
 Their word carried the constant one before, so it said nothing about the statement and only that the circuit had been written to the shape.
 
-The other five statements still assert nothing of their own and end in `assert_nothing`: BIP-39 and the two SLIP-10 derivations reach no secp256k1 private key, and the public-key and address statements are given one rather than deriving it.
+The public-key and address statements are given a key rather than deriving one, so they have no BIP-32 validity condition to assert, but they open a scope all the same: the comb asserts that `d·G` is finite, which a zero scalar violates.
+The remaining three — BIP-39 and the two SLIP-10 derivations — reach no secp256k1 key at all and end in `assert_nothing`.
 Those three of the eight are where the word is still only a shape.
 
 A BIP-32 derivation reaches an invalid key with probability below `2^-127`, so no seed exercises the new assertions and no proof this suite makes will carry a false word for that reason.

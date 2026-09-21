@@ -4,6 +4,16 @@ Ratified 2026-08-20 (Stefano).
 Goal: a standalone Rust program, installable and runnable on any host, that creates and verifies proofs of seed for software wallets — plus a pip-installable Python package — with **no duplication** of the statement, protocol, or prover/verifier code already serving the Ledger app.
 Method: **extraction, not mirroring** — promote the already-shared layers out of `ledger-app` into this library repo, and put thin frontends on them.
 
+## Status (2026-09-21)
+
+Every milestone below is done: the extraction and the consumer switch, `rust-app`, `python-app`, and cross-prover interop.
+The sections that follow are the plan as ratified, kept as the record of what was decided and why; where they describe something as pending or undecided, this section and the notes against them supersede it.
+
+- The flash comb tables moved from the device app into `proofofseed-circuits` on 2026-08-22, so the device no longer keeps them.
+- Publication waits on the zkboo crates reaching crates.io; they are at 1.3.0 locally and unpublished (see [`dependencies.md`](dependencies.md)).
+- Of the deferred decisions, the command-line surface, file naming and the sidecar format are decided; memory locking and converging `psverify` onto the Python package remain open.
+- Crate versions in the sidecars and Python progress callbacks, both planned, were not implemented.
+
 ## Ratified decisions
 
 - **Topology**: a dedicated library repo (this one, `proofofseed-core/`), consumed by `ledger-app`, the standalone Rust app, and the Python package.
@@ -126,11 +136,14 @@ Given milestone 2's byte-equality and the pre-registered device↔host equality 
 ## Sequencing and publication
 
 - Extraction starts only **after** the ledger-app hardware gate (multi-chain milestone 4 + range-proving acceptance) and that branch's merge to main: extraction is pure churn to run through a gate, and the gate's baseline should be the tree its milestones were built on.
-- **Publication to crates.io / PyPI is blocked on zkboo 0.2.0 reaching crates.io** (the same unblocking event recorded in `ledger-app/knowledge/dependencies.md`; several zkboo crates are ahead of their remotes or have none).
+- **Publication to crates.io / PyPI is blocked on the zkboo crates reaching crates.io** (written as zkboo 0.2.0 at ratification; now 1.3.0) (the same unblocking event recorded in `ledger-app/knowledge/dependencies.md`; several zkboo crates are ahead of their remotes or have none).
   Until then: local installs with `[patch.crates-io]` path overrides and `maturin develop`.
   Name reservations on crates.io/PyPI are the author's call at that point.
 
-## Deferred to milestone design (not yet decided)
+## Deferred to milestone design
+
+The first two are decided (see Status); the last two remain open.
+
 
 - Exact CLI argument surface and output-file format/naming conventions (including how `assemble` discovers and orders range files, and resumption ergonomics).
 - Whether the proof file gets a small self-describing header (request transcript + version pins) vs. staying the raw device-identical stream — a raw stream is what interop needs; a sidecar metadata file may serve both.

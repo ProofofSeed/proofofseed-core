@@ -12,5 +12,6 @@ Design records for the shared proof-of-seed library.
 - [`request-format.md`](request-format.md) — the request wire format and its strict parse.
 - [`proof-byte-pins.md`](proof-byte-pins.md) — what the golden fixture asserts, and its re-anchoring history.
 - [`zkboo-port-record.md`](zkboo-port-record.md) — what each upstream release required here, and what was measured.
+- [`measurement-instruments.md`](measurement-instruments.md) — the host measurement examples, and what each reading transfers to the device.
 - [`dependencies.md`](dependencies.md) — the zkboo crates, the patch table, and the proof hash.
 - `host-benchmarks-2026-09-06.txt` — host example output, recorded as taken.
