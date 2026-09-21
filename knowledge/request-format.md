@@ -14,14 +14,14 @@ All integers are big-endian.
 `REQ_FLAG_FAMILY` announces a `family(1)` byte immediately after the flags byte, because it selects how the other fields are interpreted.
 The remaining fields follow in flag-bit order:
 
-| flag                | bit | payload                                                      |
-| ------------------- | --- | ------------------------------------------------------------ |
-| `REQ_FLAG_PATH`     | 0   | a witness path: `u8` count, then that many `u32` components  |
-| `REQ_FLAG_INDEX_CC` | 1   | an asserted child `index(4)` and parent `chain_code(32)`     |
-| `REQ_FLAG_BINDING`  | 2   | the proof binding: `u8` length, then that many bytes         |
-| reserved            | 3   | claimed by the parked mnemonic-entry ceremony line; rejected |
-| `REQ_FLAG_FAMILY`   | 4   | the derivation `family(1)`                                   |
-| `REQ_FLAG_RANGE`    | 5   | the response range `start(2)` and `end(2)`, half-open        |
+| flag                | bit | payload                                                             |
+| ------------------- | --- | ------------------------------------------------------------------- |
+| `REQ_FLAG_PATH`     | 0   | a witness path: `u8` count, then that many `u32` components         |
+| `REQ_FLAG_INDEX_CC` | 1   | an asserted child `index(4)` and parent `chain_code(32)`            |
+| `REQ_FLAG_BINDING`  | 2   | the proof binding: `u8` length, then that many bytes                |
+| reserved            | 3   | unassigned (once the abandoned mnemonic-entry ceremony's); rejected |
+| `REQ_FLAG_FAMILY`   | 4   | the derivation `family(1)`                                          |
+| `REQ_FLAG_RANGE`    | 5   | the response range `start(2)` and `end(2)`, half-open               |
 
 ## Strictness
 
