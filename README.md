@@ -3,6 +3,12 @@
 The shared proof-of-seed library: the ZKBoo statement circuits for the BIP-32/secp256k1 and SLIP-10/ed25519 derivation families, the request and proof-identity transcript with ranged deterministic-entropy proving, and the host-side prover and verifier.
 It is the single implementation of the statements, consumed by the ProofofSeed Ledger app, the standalone `proofofseed` command-line tool, and the `proofofseed` Python package, so a change here reaches all three at once.
 
+## Status
+
+A research prototype: it has not been audited and is not for production use.
+The 438-response default gives a soundness error of `(2/3)^438 <= 2^-256` only under the Fiat-Shamir transform and the security of the Keccak-256 hash, assumptions that have not been independently reviewed.
+The `zkboo` crates it depends on are not yet published, so the workspace cannot be built from a clean checkout until they are; the dependency table says where they are expected to sit.
+
 ## Build and test
 
 ```sh
@@ -31,7 +37,7 @@ See [`knowledge/assertion-word.md`](knowledge/assertion-word.md).
 
 ## Dependencies
 
-The `zkboo` crates at 1.3.0 — `zkboo-keccak` and `zkboo-ripemd160` stayed at 1.2.0 — resolved to the local working trees under `<zkboo>` by the workspace's `[patch.crates-io]`.
+The `zkboo` crates at 1.3.0 — `zkboo-keccak` and `zkboo-ripemd160` stayed at 1.2.0 — resolved to local checkouts of the `zkboo` repository, expected at `../../zkboo`, by the workspace's `[patch.crates-io]`.
 That release is not on crates.io yet, and every earlier published version is yanked.
 The proof hash is Keccak-256 and is this ecosystem's to supply, in `proofofseed_circuits::hasher`.
 See [`knowledge/dependencies.md`](knowledge/dependencies.md), which records why a patch table can disengage in silence.
