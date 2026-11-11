@@ -1,7 +1,7 @@
 # Porting this library across the zkboo releases
 
 The record of what each upstream release required here, and what was measured to establish that nothing else moved.
-Upstream records are `<zkboo>/MIGRATION.md`, `MIGRATION-NEXT.md` and `DESIGN-ASSERTIONS-HINTS.md`.
+Upstream records are `<zkboo>/knowledge/archive/migration-1.2.0.md`, `knowledge/archive/migration-1.2.1.md` and `knowledge/archive/assertions-hints-design.md`.
 
 ## zkboo v1.2.0, 2026-09-04
 
