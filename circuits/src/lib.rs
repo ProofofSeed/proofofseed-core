@@ -88,6 +88,7 @@ const MASTER_PRIV_HEX: &str = "e8f32e723decf4051aefac8e2c93c9c5b214313817cdb01a1
 const MASTER_CC_HEX: &str = "873dff81c02f525623fd1fe5167eac3a55a049de3d314bb42ee227ffed37d508";
 const M0H_CC_HEX: &str = "47fdacbd0f1097043b78c63c20c34ef4ed9a111d980047ad16282c7ae6236141";
 const M0H_PRIV_HEX: &str = "edb2e14f9ee77d26dd93b4ecede8d16ed408ce149b6cd80b0715a2d911a0afea";
+// Public BIP-39 reference mnemonic (BIP-39 test vectors), not a wallet seed.
 const MNEMONIC: &[u8] =
     b"abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 const BIP39_SALT: &[u8] = b"mnemonicTREZOR";

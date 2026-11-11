@@ -12,6 +12,7 @@ use zkboo_hmac::hmac;
 use zkboo_profiling::profile;
 use zkboo_sha2::{SHA512_BLOCKSIZE, sha512bytes};
 
+// Public BIP-39 reference mnemonic (BIP-39 test vectors), not a wallet seed.
 const MNEMONIC: &[u8] =
     b"abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 

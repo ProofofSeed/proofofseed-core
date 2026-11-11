@@ -141,7 +141,8 @@ impl Circuit for PubkeyOf {
 
 #[test]
 fn solana_wallet_core_anchor() {
-    // The trust-wallet-core vector (TWSolanaAddress.HDWallet): this mnemonic at
+    // The trust-wallet-core vector (TWSolanaAddress.HDWallet), a public test vector from
+    // that project's test suite, not a BIP-39 reference vector and not a wallet seed: this mnemonic at
     // Solana's default path m/44'/501'/0' gives the address below, whose Base58
     // decoding is the ed25519 public key. The whole pipeline runs through the shared
     // statement circuits (BIP-39 seed at the full 2048 rounds, SLIP-10 master, three

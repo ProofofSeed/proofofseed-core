@@ -22,4 +22,4 @@ It fixes the Fiat-Shamir transcript, the view commitments and the pseudo-random 
 
 ## Consumers
 
-A change here reaches `../ledger-app`, `../rust-app` and `../python-app` at once, so all four are built before one is called done.
+A change here reaches the `ledger-app`, `rust-app` and `python-app` repositories at once, so all four are built before one is called done.

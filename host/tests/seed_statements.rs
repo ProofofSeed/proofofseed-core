@@ -21,6 +21,7 @@ fn real_seed() -> Vec<u8> {
     (0..64u8).map(|i| i.wrapping_mul(7).wrapping_add(11)).collect()
 }
 
+// Public BIP-39 reference mnemonic (BIP-39 test vectors), not a wallet seed.
 const MNEMONIC: &[u8] =
     b"abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 

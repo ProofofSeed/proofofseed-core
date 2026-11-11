@@ -93,7 +93,7 @@ Relative to the hardened child, which the device fingerprints without incident:
 ================================================================
 === gen_comb_table
 ================================================================
-wrote 832 entries (79872 bytes data) to <proofofseed>/proofofseed-core/host/../circuits/src/comb_table.rs
+wrote 832 entries (79872 bytes data) to proofofseed-core/host/../circuits/src/comb_table.rs
 --- gen_comb_table exit=0 elapsed=0s
 
 ================================================================

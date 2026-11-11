@@ -55,7 +55,7 @@ Predicted: the heap loses the 1,664 B advice object and the stack gains a known 
 Confirmed on hardware 2026-09-07 and 2026-09-09, better than predicted.
 Every curve heap peak came back 8 B below its pre-advice value, so the advice object arrived and left without the device seeing it, and the least servable hole is 3,400–6,848 B against a 2,048 B largest request.
 The 224 B never appeared in the stack high-water at all, because a marginal frame adds to the high-water only if it sits on the deepest call path and this one does not.
-The full record is `../../ledger-app/knowledge/benchmarks.md`.
+The full record is the `ledger-app` repository's `knowledge/benchmarks.md`.
 
 The mirror also runs once per circuit execution rather than once per proof — 876 evaluations against one at 438 responses — which zkboo measures at +0.33% to +0.50% of prover wall clock.
 That is a host figure at window width 5 over precomputed tables, on arithmetic whose long dependent 256-bit multiply-reduce chain is the shape most likely to scale differently on a 32-bit core, so the per-response device law must not be restated from it.
@@ -85,9 +85,9 @@ The cost is +99 B per response on the master key and the hardened child, and abo
 The proof-byte evidence, including the rows that did not move, is in [`proof-byte-pins.md`](proof-byte-pins.md).
 
 **No device figure carries over for those three statements**, and that is more than a size correction: build D's compiled stack floor was derived from the master key's painted depth and largest sampled fall, and build C's from the hardened child's, both measured on circuits this release changed.
-`../../ledger-app/host/validate_instruments.py` now checks the two readings against the figures it holds instead of assuming them.
+The `ledger-app` repository's `host/validate_instruments.py` now checks the two readings against the figures it holds instead of assuming them.
 
-Confirmed on hardware 2026-09-21 (`../../ledger-app/knowledge/benchmarks.md` §2026-09-21): every proof verified, and the moved statements went no deeper — the master key painted 17,080 B with a largest fall of 1,928 B, against 17,184 B and 2,152 B before.
+Confirmed on hardware 2026-09-21 (the `ledger-app` repository's `knowledge/benchmarks.md` §2026-09-21): every proof verified, and the moved statements went no deeper — the master key painted 17,080 B with a largest fall of 1,928 B, against 17,184 B and 2,152 B before.
 Build D's floor holds; build C's had drifted out of its window through two statements this release did not touch, and is now a 16,640 B heap with a 2,496 B floor.
 
 ## Traps this cost
