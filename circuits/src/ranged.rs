@@ -3,7 +3,7 @@
 //! Ranged proving: emitting any half-open sub-range of a proof's response sequence,
 //! and the deterministic prover entropy the ranges of one proof must share.
 //!
-//! 🚨 The derivation absorbs everything the challenge depends on, and rests on an
+//! The derivation absorbs everything the challenge depends on, and rests on an
 //! invariant it cannot enforce by itself: no secret may reach a circuit through
 //! `Frontend::input` without also appearing in the [WitnessMaterial] handed to
 //! [request_transcript_digest]. See `knowledge/ranged-entropy.md`.
@@ -33,7 +33,7 @@ fn absorb_bytes(h: &mut Keccak256Hasher, data: &[u8]) {
 /// The witness material of a resolved request, as every prover assembles it for the
 /// entropy derivation.
 ///
-/// 🚨 Variants are disambiguated by absorbed part count together with the statement
+/// Variants are disambiguated by absorbed part count together with the statement
 /// byte, so a new one must not collide with an existing pair; see
 /// `knowledge/ranged-entropy.md`.
 pub enum WitnessMaterial<'a> {
@@ -81,7 +81,7 @@ pub fn request_transcript_digest(
     req: &ProofRequest,
     secrets: &[&[u8]],
 ) -> Zeroizing<[u8; 32]> {
-    // 🚨 Absorbed narrowed, so a value that does not survive the narrowing must not
+    // Absorbed narrowed, so a value that does not survive the narrowing must not
     // reach the hasher: see knowledge/ranged-entropy.md.
     assert!(req.num_iters <= u16::MAX as usize, "num_iters must fit the transcript");
     assert!(req.rounds <= u16::MAX as usize, "rounds must fit the transcript");
@@ -142,7 +142,7 @@ pub fn deterministic_seed_entropy<C: Circuit>(
 
 /// [deterministic_seed_entropy] with a [BackendHook] wrapping the fingerprinting pass.
 ///
-/// ⚠️ The pass services no io, so a caller on a device with a watchdog must use this
+/// The pass services no io, so a caller on a device with a watchdog must use this
 /// form; see `knowledge/circuit-fingerprints.md`.
 pub fn deterministic_seed_entropy_hooked<C: Circuit, BH: BackendHook>(
     circuit: &C,

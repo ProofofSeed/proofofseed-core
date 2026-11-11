@@ -13,9 +13,11 @@ use proofofseed_host::harness::{gen_stream, gen_stream_range, gen_stream_range_t
 
 const H: u32 = 0x8000_0000;
 
+/// Standard BIP-39/BIP-86 test mnemonic: a public test vector, not a wallet seed.
 const MNEMONIC: &[u8] = b"abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
 /// BIP-86's published `m/86'/0'/0'` account key for that mnemonic.
+/// Public test vector from BIP-86 "Test vectors" (github.com/bitcoin/bips), not a secret.
 const BIP86_ACCOUNT_XPRV: &str = "xprv9xgqHN7yz9MwCkxsBPN5qetuNdQSUttZNKw1dcYTV4mkaAFiBVGQziHs3NRSWMkCzvgjEe3n9xV8oYywvM8at9yRqyaZVz6TYYhX98VjsUk";
 
 fn hex(s: &str) -> Vec<u8> {

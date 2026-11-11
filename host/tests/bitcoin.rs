@@ -17,15 +17,17 @@ use zkboo::word::Words;
 const H: u32 = 0x8000_0000;
 
 /// The standard BIP-39 test mnemonic shared by the BIP-49/84/86 test vectors.
+/// Public test vector, not a wallet seed: BIP-84 and BIP-86, "Test vectors" (github.com/bitcoin/bips).
 const MNEMONIC: &[u8] = b"abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
 /// The published root key of that mnemonic (empty passphrase): BIP-86's `rootpriv`.
+/// Public test vector from BIP-86 "Test vectors" (github.com/bitcoin/bips), not a secret; the same applies to every `xprv`/`zprv` constant below.
 /// BIP-84 publishes the same key material in `zprv` encoding (checked below).
 const ROOT_XPRV: &str = "xprv9s21ZrQH143K3GJpoapnV8SFfukcVBSfeCficPSGfubmSFDxo1kuHnLisriDvSnRRuL2Qrg5ggqHKNVpxR86QEC8w35uxmGoggxtQTPvfUu";
 const ROOT_ZPRV: &str = "zprvAWgYBBk7JR8Gjrh4UJQ2uJdG1r3WNRRfURiABBE3RvMXYSrRJL62XuezvGdPvG6GFBZduosCc1YP5wixPox7zhZLfiUm8aunE96BBa4Kei5";
 
 /// The published account-level keys: BIP-84's `m/84'/0'/0'` zprv and BIP-86's
-/// `m/86'/0'/0'` xprv. (BIP-44 publishes no key vectors and BIP-49's are
+/// `m/86'/0'/0'` xprv, public test vectors from the same BIP texts. (BIP-44 publishes no key vectors and BIP-49's are
 /// testnet-only, so 44' and 49' anchor against rust-bitcoin instead.)
 const BIP84_ACCOUNT_ZPRV: &str = "zprvAdG4iTXWBoARxkkzNpNh8r6Qag3irQB8PzEMkAFeTRXxHpbF9z4QgEvBRmfvqWvGp42t42nvgGpNgYSJA9iefm1yYNZKEm7z6qUWCroSQnE";
 const BIP86_ACCOUNT_XPRV: &str = "xprv9xgqHN7yz9MwCkxsBPN5qetuNdQSUttZNKw1dcYTV4mkaAFiBVGQziHs3NRSWMkCzvgjEe3n9xV8oYywvM8at9yRqyaZVz6TYYhX98VjsUk";

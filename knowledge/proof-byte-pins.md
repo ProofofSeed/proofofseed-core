@@ -86,7 +86,7 @@ Had change 2 touched a proof byte the `raw/public_key` pair would have said so, 
 - The four `raw/` rows unchanged.
 
 Independently, all eight circuit fingerprints were unchanged across both releases, as the upstream release said they would be.
-The current set is tabulated in `../../ledger-app/knowledge/benchmarks.md`.
+The current set is tabulated in the `ledger-app` repository's `knowledge/benchmarks.md`.
 
 **2026-09-20**, against zkboo 1.3.0, which makes the BIP-32 derivations assert the validity conditions BIP-32 states.
 Five rows moved and four did not, and the split is again the finding: the two statements that gained assertions moved, and the six other statements' rows did not.

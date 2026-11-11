@@ -1,13 +1,13 @@
 # Plan of record: the shared proof-of-seed library and the standalone provers
 
-Ratified 2026-08-20 (Stefano).
+Ratified 2026-08-20.
 Goal: a standalone Rust program, installable and runnable on any host, that creates and verifies proofs of seed for software wallets — plus a pip-installable Python package — with **no duplication** of the statement, protocol, or prover/verifier code already serving the Ledger app.
 Method: **extraction, not mirroring** — promote the already-shared layers out of `ledger-app` into this library repo, and put thin frontends on them.
 
 ## Status (2026-09-21)
 
 Every milestone below is done: the extraction and the consumer switch, `rust-app`, `python-app`, and cross-prover interop.
-The sections that follow are the plan as ratified, kept as the record of what was decided and why; where they describe something as pending or undecided, this section and the notes against them supersede it.
+The sections that follow are the plan as decided, kept as the record of what was decided and why; where they describe something as pending or undecided, this section and the notes against them supersede it.
 
 - The flash comb tables moved from the device app into `proofofseed-circuits` on 2026-08-22, so the device no longer keeps them.
 - Publication waits on the zkboo crates reaching crates.io; they are at 1.3.0 locally and unpublished (see [`dependencies.md`](dependencies.md)).
@@ -24,7 +24,7 @@ The sections that follow are the plan as ratified, kept as the record of what wa
   App repo folders stay as proposed: `rust-app/`, `python-app/` (under `<proofofseed>/`, each its own git repo per project convention).
 - **Soundness default: 438 responses (PQ-128), everywhere.**
   The response count stays a runtime parameter, but every default, example, headline number and document in the new repos uses 438.
-  The classical-128 figure (219, `n_eps(128)` — ratified 2026-08-19 for the SNARK-lifter track only) must not appear in these repos unless explicitly requested.
+  This repository does not use a classical-128 response count; that figure belongs to the lifting track, not to the provers.
 - **CLI scope**: `prove`, `verify`, `derive` (public outputs for verifier-side pinning), `assemble` (concatenate + verify range files), `profile` (the zkboo-profiling numbers for a statement), and **dry-run planning** (`prove --dry-run` or a `plan` command): proof size, prover/verifier memory, and a time estimate for the exact requested parameters, before any witness is touched.
 
 ## Architecture
@@ -89,7 +89,7 @@ Acceptance (all binary, all off-device — items 1 and 5 gate M1b, the rest gate
 **M1b reconciliation carry-backs** (improvements made here that should propagate to ledger-app at the switch, not silently diverge; all verified to change no proof bytes — the neutrality gate still passes): (1) `verify_stream` rejects a proof with unread **trailing bytes** (a soundness-downgrade guard from the CLI's adversarial review — without it a longer proof verifies under a smaller `num_iters`); verifier-side only.
 (2) `SeedCircuit` now zeroizes its `salt` field as well as `mnemonic` (the salt carries the BIP-39 passphrase); `zeroize_on_drop` affects only `Drop`, not `exec`, so proof bytes are unchanged, and the device's proving path benefits identically.
 
-## Milestone 2 design rulings (2026-08-20, Stefano)
+## Milestone 2 design rulings (2026-08-20)
 
 - **Proof file = the raw device-identical stream** (interop-clean), with a **JSON sidecar** (`<file>.json`) carrying the request transcript, range, entropy mode, versions (crates + `DETERMINISTIC_ENTROPY_VERSION`), stream length and Keccak-256.
   The sidecar is metadata, never load-bearing for soundness.
@@ -136,7 +136,7 @@ Given milestone 2's byte-equality and the pre-registered device↔host equality 
 ## Sequencing and publication
 
 - Extraction starts only **after** the ledger-app hardware gate (multi-chain milestone 4 + range-proving acceptance) and that branch's merge to main: extraction is pure churn to run through a gate, and the gate's baseline should be the tree its milestones were built on.
-- **Publication to crates.io / PyPI is blocked on the zkboo crates reaching crates.io** (written as zkboo 0.2.0 at ratification; now 1.3.0) (the same unblocking event recorded in `ledger-app/knowledge/dependencies.md`; several zkboo crates are ahead of their remotes or have none).
+- **Publication to crates.io / PyPI is blocked on the zkboo crates reaching crates.io** (written as zkboo 0.2.0 at ratification; now 1.3.0) (the same unblocking event recorded in the Ledger app repository's `knowledge/dependencies.md`).
   Until then: local installs with `[patch.crates-io]` path overrides and `maturin develop`.
   Name reservations on crates.io/PyPI are the author's call at that point.
 

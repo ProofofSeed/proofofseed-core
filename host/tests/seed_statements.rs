@@ -21,6 +21,7 @@ fn real_seed() -> Vec<u8> {
     (0..64u8).map(|i| i.wrapping_mul(7).wrapping_add(11)).collect()
 }
 
+// Public BIP-39 reference mnemonic (BIP-39 test vectors), not a wallet seed.
 const MNEMONIC: &[u8] =
     b"abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
@@ -111,7 +112,7 @@ fn a_bip39_proof_of_a_real_mnemonic_verifies_when_the_shape_and_salt_are_given()
 
 #[test]
 fn a_wrong_shape_is_refused_at_the_protocols_own_rate_and_no_better() {
-    // 🚨 Verifying under a circuit of the wrong witness shape is refused by ZKBoo's own
+    // Verifying under a circuit of the wrong witness shape is refused by ZKBoo's own
     // soundness and by nothing else. A response whose challenge does not put party 2's
     // input share on the wire does not desynchronise the stream when the shape is wrong,
     // and the re-derived challenge then has to disagree as well — so a single response

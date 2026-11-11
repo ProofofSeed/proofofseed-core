@@ -67,7 +67,7 @@ fn be_u16(data: &[u8], off: usize) -> Option<u16> {
 
 /// Parses the request data, returning `None` for a malformed buffer.
 ///
-/// 🚨 A request-anchored proof must never silently fall back to a default on a field the
+/// A request-anchored proof must never silently fall back to a default on a field the
 /// host thought it sent; the layout and the refusal rules are in
 /// `knowledge/request-format.md`.
 pub fn parse_proof_request(data: &[u8], with_num_iters: bool) -> Option<ProofRequest> {

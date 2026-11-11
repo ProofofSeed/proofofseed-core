@@ -122,7 +122,7 @@ fn a_lone_range_is_not_a_complete_proof() {
 
 #[test]
 fn a_lone_range_is_refused_at_the_protocols_own_rate_and_no_better() {
-    // 🚨 A lone range is not structurally distinguishable from a complete proof of its
+    // A lone range is not structurally distinguishable from a complete proof of its
     // own length. Nothing in the stream says which of `num_iters` commitments its
     // challenges were derived over, so the refusal is the ordinary Fiat-Shamir one: the
     // verifier re-derives `length` challenges from the commitments it was given, and an

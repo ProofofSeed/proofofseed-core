@@ -97,7 +97,7 @@ impl<'a, 'd> ReplaySource<[u8; 32]> for CursorReplaySource<'a, 'd> {
 
 /// Verifies a streamed proof for a circuit against its public output and binding.
 ///
-/// 🚨 `num_iters` is part of the statement: pass the response count the verifier
+/// `num_iters` is part of the statement: pass the response count the verifier
 /// demands, never one derived from the proof's own length.
 pub fn verify_stream<C: Circuit>(
     circuit: &C,
@@ -169,7 +169,7 @@ fn verify_stream_inner<C: Circuit>(
         }
     }
 
-    // 🚨 Exactly `num_iters` responses, with no trailing bytes: without this a longer
+    // Exactly `num_iters` responses, with no trailing bytes: without this a longer
     // proof verifies under a shorter count. See knowledge/proof-stream.md.
     if cur.pos != stream.len() {
         return false;
@@ -313,7 +313,7 @@ pub fn verify(
 
 /// [verify], told the witness shape of the seed statements.
 ///
-/// ⚠️ Without the shape a seed proof cannot be verified at all; see
+/// Without the shape a seed proof cannot be verified at all; see
 /// `knowledge/verifier-circuits.md`.
 #[allow(clippy::too_many_arguments)]
 pub fn verify_with_shape(
@@ -753,7 +753,7 @@ pub mod derive {
 
     /// Splits a BIP-32 master or child circuit output into a [Node].
     fn bip32_node_of(words: Words) -> Node {
-        // 🚨 The assertion word is checked and removed before anything is sliced.
+        // The assertion word is checked and removed before anything is sliced.
         let mut words = checked_payload(words)
             .expect("a BIP-32 derivation step asserted a non-finite public key");
         let mut private_key = Zeroizing::new([0u8; 32]);

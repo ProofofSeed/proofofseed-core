@@ -45,7 +45,7 @@ mod flash {
 
     /// Rebuilds one table entry's three Montgomery coordinates from its stored limbs.
     ///
-    /// 🚨 The limbs are the stored representation, and nothing in the generated file
+    /// The limbs are the stored representation, and nothing in the generated file
     /// records that but this line; see `knowledge/comb-tables.md`.
     fn reconstruct(limbs: &[[u64; 4]; 3]) -> Coords {
         core::array::from_fn(|c| {
