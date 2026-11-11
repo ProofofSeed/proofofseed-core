@@ -3,7 +3,7 @@
 //! Off-device proof-size estimator: the streamed proof size per statement, and the
 //! device streaming time it predicts.
 //!
-//! ⚠️ The streaming phase only, and the rate is a property of the statement rather than
+//! The streaming phase only, and the rate is a property of the statement rather than
 //! of the device; see `knowledge/measurement-instruments.md`.
 //!
 //! Run: `cargo run --release -p proofofseed-host --example proof_size`
@@ -99,7 +99,7 @@ fn main() {
     println!(
         "statement           bytes/response   streaming s/response (excludes the challenge phase)"
     );
-    // ⚠️ The rate is a property of the statement, not of the device.
+    // The rate is a property of the statement, not of the device.
     let rows: [(&str, usize, f64); 6] = [
         ("master_key", proof_size(&master_key_circuit(), 1), HASH_RATE),
         ("hardened_child", proof_size(&hardened_child_circuit(), 1), HASH_RATE),

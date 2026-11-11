@@ -264,7 +264,7 @@ salt (passphrase)              public         secret   extra/resp
 The full statement at 2048 rounds is 52454598 B per response, so a 12-character
 passphrase made secret costs 20 B more per response: 0.0000% .
 
-⚠️ The salt's *length* stays public either way — it is the number of input words —
+The salt's *length* stays public either way — it is the number of input words —
 so this hides the passphrase's value, not its length nor the fact that one exists.
 --- salt_secrecy_cost exit=0 elapsed=1s
 

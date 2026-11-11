@@ -3,7 +3,7 @@
 //! Relative call-stack depth of the prover, per statement, measured through the same
 //! per-operation hook the device uses to feed its watchdog.
 //!
-//! ⚠️ The device's ordering must not be inferred from this table; the device falsified
+//! The device's ordering must not be inferred from this table; the device falsified
 //! it on 2026-08-23. See `knowledge/measurement-instruments.md`.
 //!
 //! Run: `cargo run --release -p proofofseed-host --example stack_profile`

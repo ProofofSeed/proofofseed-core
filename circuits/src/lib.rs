@@ -65,7 +65,7 @@ pub const ASSERTION_TRUE: u8 = 1;
 /// Removes a circuit's trailing assertion word, returning the payload only when every
 /// assertion held.
 ///
-/// 🚨 The only correct way to read a circuit's outputs as values; see
+/// The only correct way to read a circuit's outputs as values; see
 /// `knowledge/assertion-word.md`.
 pub fn checked_payload(mut words: Words) -> Option<Words> {
     let assertion = words.u8.pop()?;
@@ -533,7 +533,7 @@ pub fn ethereum_address_verify_circuit() -> AddressCircuit {
 /// The structural fingerprint of the circuit a prover would run for a family and
 /// statement, or `None` for a pair no prover implements.
 ///
-/// ⚠️ The pass services no io and its cost is linear in the gate count, so a caller on
+/// The pass services no io and its cost is linear in the gate count, so a caller on
 /// a device with a watchdog must use [statement_fingerprint_hooked]. See
 /// `knowledge/circuit-fingerprints.md`.
 pub fn statement_fingerprint<T: CombTableSource>(

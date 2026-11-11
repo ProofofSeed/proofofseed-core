@@ -3,7 +3,7 @@
 //! Charges a prove against a heap of the device's exact size, using the device's exact
 //! allocator, and reports whether it is served.
 //!
-//! 🔴 Withdrawn as a source of device figures (2026-08-24), and readable in one
+//! Withdrawn as a source of device figures (2026-08-24), and readable in one
 //! direction only even before that; see `knowledge/measurement-instruments.md`.
 //!
 //! Run: `cargo run --release -p proofofseed-host --example device_arena`

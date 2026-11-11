@@ -97,7 +97,7 @@ impl ResponseDataCollector<[u8; 32], [u8; 32]> for DiscardSink {
 /// The heap the committed SRAM split gives the prover (`HEAP_SIZE` in the app's
 /// `.cargo/config.toml`).
 ///
-/// 🔴 **The peaks below do not transfer to the device, and the verdicts against this
+/// **The peaks below do not transfer to the device, and the verdicts against this
 /// budget are screening only.** Measured on hardware on 2026-08-24, a one-response
 /// master-key proof peaks at 11,747 B where this example reports 16,932 B — the host
 /// overstates by 44%. The configuration is not the cause: this example already uses the

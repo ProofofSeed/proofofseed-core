@@ -111,7 +111,7 @@ fn a_bip39_proof_of_a_real_mnemonic_verifies_when_the_shape_and_salt_are_given()
 
 #[test]
 fn a_wrong_shape_is_refused_at_the_protocols_own_rate_and_no_better() {
-    // 🚨 Verifying under a circuit of the wrong witness shape is refused by ZKBoo's own
+    // Verifying under a circuit of the wrong witness shape is refused by ZKBoo's own
     // soundness and by nothing else. A response whose challenge does not put party 2's
     // input share on the wire does not desynchronise the stream when the shape is wrong,
     // and the re-derived challenge then has to disagree as well — so a single response

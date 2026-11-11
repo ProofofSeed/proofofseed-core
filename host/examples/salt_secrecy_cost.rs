@@ -78,7 +78,7 @@ fn main() {
         delta / whole as f64 * 100.0
     );
     println!(
-        "\n⚠️ The salt's *length* stays public either way — it is the number of input words —\n\
+        "\nThe salt's *length* stays public either way — it is the number of input words —\n\
          so this hides the passphrase's value, not its length nor the fact that one exists."
     );
 }
