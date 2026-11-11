@@ -43,3 +43,8 @@ The proof hash is Keccak-256 and is this ecosystem's to supply, in `proofofseed_
 See [`knowledge/dependencies.md`](knowledge/dependencies.md), which records why a patch table can disengage in silence.
 
 Licensed LGPL-3.0-or-later; every source file carries an SPDX header.
+
+## Licence
+
+Copyright © 2026 Stefano Gogioso.
+The code is LGPL-3.0-or-later (see `LICENSE`); vendored third-party code keeps its own licence.
