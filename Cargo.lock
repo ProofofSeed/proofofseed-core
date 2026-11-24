@@ -215,7 +215,7 @@ dependencies = [
 
 [[package]]
 name = "proofofseed-circuits"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "proofofseed-circuits",
  "tiny-keccak",
@@ -229,7 +229,7 @@ dependencies = [
 
 [[package]]
 name = "proofofseed-host"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bitcoin",
  "getrandom",
