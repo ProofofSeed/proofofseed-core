@@ -1,23 +1,10 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 #
 # The proofofseed-core workspace: the shared statement circuits and the host-side
-# prover/verifier library (see knowledge/plan.md for the plan of record). Members
-# cross-depend by crates.io version; the patch table below resolves every zkboo
-# crate to its local working tree under <zkboo> until zkboo is published;
-# members reference each other by version + path.
+# prover/verifier library (see knowledge/plan.md for the plan of record). The zkboo
+# crates resolve from crates.io; members reference each other by version + path.
 
 [workspace]
 members = ["circuits", "host"]
 resolver = "3"
 
-[patch.crates-io]
-zkboo = { path = "../../zkboo/zkboo" }
-zkboo-sha2 = { path = "../../zkboo/zkboo-sha2" }
-zkboo-hmac = { path = "../../zkboo/zkboo-hmac" }
-zkboo-modular = { path = "../../zkboo/zkboo-modular" }
-zkboo-ecc = { path = "../../zkboo/zkboo-ecc" }
-zkboo-keccak = { path = "../../zkboo/zkboo-keccak" }
-zkboo-ripemd160 = { path = "../../zkboo/zkboo-ripemd160" }
-zkboo-bip32 = { path = "../../zkboo/zkboo-bip32" }
-zkboo-profiling = { path = "../../zkboo/zkboo-profiling" }
-zkboo-circuit-hash = { path = "../../zkboo/zkboo-circuit-hash" }

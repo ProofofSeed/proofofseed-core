@@ -13,7 +13,7 @@ The library exists and every consumer is on it.
 There is one implementation of the statements, and a change here reaches the device app, the command-line tool and the Python package at once.
 The only divergence is additive: this library carries `WitnessMaterial::Seed` and `::Mnemonic` for the software-wallet provers, which the device app has no use for.
 
-The stack is on zkboo 1.3.0, ported 2026-09-20 and confirmed on hardware 2026-09-21, as the releases before it were on 2026-09-07 and 2026-09-09.
+The stack was ported to zkboo 1.3.0 on 2026-09-20 and confirmed on hardware on 2026-09-21, as the releases before it were on 2026-09-07 and 2026-09-09; since 2026-11-24 it resolves the published crates, with `zkboo` at 1.3.1, and its fingerprints and proof bytes are unchanged.
 It moved the three BIP-32 secp256k1 derivations' fingerprints and proof bytes; the device figures for them were re-read on 2026-09-21 and are in the `ledger-app` repository's `knowledge/benchmarks.md`.
 `DETERMINISTIC_ENTROPY_VERSION` is 4.
 What each release required, and what was measured to establish that nothing else moved, is in [`knowledge/zkboo-port-record.md`](knowledge/zkboo-port-record.md).
@@ -28,6 +28,6 @@ What each release required, and what was measured to establish that nothing else
   A change may move them, but never silently, and never in more rows of the proof-byte fixture than it means to.
 - **No secret may reach a circuit through `Frontend::input` without also appearing in the `WitnessMaterial` handed to `request_transcript_digest`.**
   The circuit fingerprint cannot substitute for it; see [`knowledge/ranged-entropy.md`](knowledge/ranged-entropy.md).
-- Rust edition 2024, `no_std + alloc` for the circuits crate, LGPL-3.0-or-later, crates.io-style cross-dependencies with `[patch.crates-io]` path overrides to sibling checkouts of the unpublished `zkboo` crates.
+- Rust edition 2024, `no_std + alloc` for the circuits crate, LGPL-3.0-or-later, the `zkboo` crates from crates.io, refused by `host/build.rs` from any other source.
 - Build and test in `--release`; targeted tests only.
 - The code is a research prototype and has not been audited.

@@ -16,7 +16,7 @@ cargo test --release --workspace
 ```
 
 Debug and sequential builds are impractical for these circuits.
-`rust-toolchain.toml` pins the compiler to Rust 1.95.0, and `host/build.rs` refuses to build if this workspace's lockfile resolves a zkboo crate from a registry, which is what a `[patch.crates-io]` table does silently once a local version stops satisfying its requirement.
+`rust-toolchain.toml` pins the compiler to Rust 1.95.0, and `host/build.rs` refuses to build if this workspace's lockfile resolves a zkboo crate from anywhere but crates.io, so that a `[patch]` in force cannot pass for the published code.
 It sits in `host` rather than `circuits` because a build script in `circuits` moves the Ledger app's application hash, that crate being linked into the device binary.
 The suite covers the statement outputs against their canonical vectors, the circuit fingerprints, the request vectors, the ranged-proving transcript, and a proof-byte pin (`host/tests/golden_streams.txt`) that fails when proof bytes move for any reason.
 
@@ -37,10 +37,9 @@ See [`knowledge/assertion-word.md`](knowledge/assertion-word.md).
 
 ## Dependencies
 
-The `zkboo` crates at 1.3.0 — `zkboo-keccak` and `zkboo-ripemd160` stayed at 1.2.0 — resolved to local checkouts of the `zkboo` repository, expected at `../../zkboo`, by the workspace's `[patch.crates-io]`.
-That release is not on crates.io yet, and every earlier published version is yanked.
+The `zkboo` crates resolve from crates.io: `zkboo` at 1.3.1, `zkboo-keccak` and `zkboo-ripemd160` at 1.2.0, and the others at 1.3.0.
 The proof hash is Keccak-256 and is this ecosystem's to supply, in `proofofseed_circuits::hasher`.
-See [`knowledge/dependencies.md`](knowledge/dependencies.md), which records why a patch table can disengage in silence.
+See [`knowledge/dependencies.md`](knowledge/dependencies.md).
 
 Licensed LGPL-3.0-or-later; every source file carries an SPDX header.
 
