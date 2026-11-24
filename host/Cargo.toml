@@ -5,6 +5,7 @@ name = "proofofseed-host"
 version = "0.1.0"
 edition = "2024"
 license = "LGPL-3.0-or-later"
+repository = "https://github.com/ProofofSeed/proofofseed-core"
 description = "Host-side proof-of-seed library: the streaming ZKBoo verifier, the host prover (full and ranged), and executor-based derivation over the shared statement circuits."
 
 [dependencies]

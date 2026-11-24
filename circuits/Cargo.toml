@@ -5,6 +5,7 @@ name = "proofofseed-circuits"
 version = "0.1.0"
 edition = "2024"
 license = "LGPL-3.0-or-later"
+repository = "https://github.com/ProofofSeed/proofofseed-core"
 description = "The six ProofofSeed statements as ZKBoo circuits, with test vectors, shared by the on-device prover and the host verifier so they agree on each circuit."
 
 [dependencies]
